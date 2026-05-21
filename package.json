@@ -1,0 +1,22 @@
+{
+  "name": "tracklet-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "panel": "MODE=panel node src/server.js",
+    "wing": "MODE=wing node src/server.js",
+    "instance": "MODE=instance node src/server.js",
+    "check": "node --check src/server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "connect-pg-simple": "^10.0.0",
+    "express": "^4.21.2",
+    "express-session": "^1.18.2",
+    "http-proxy-middleware": "^3.0.5",
+    "nanoid": "^5.1.6",
+    "pg": "^8.16.3"
+  }
+}

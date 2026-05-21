@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tracklet Instance</title>
+    <link rel="stylesheet" href="/assets/app.css" />
+  </head>
+  <body>
+    <div id="login" class="login hidden">
+      <form class="card form-grid" id="loginForm">
+        <div class="brand"><img src="/assets/generated-icon.png" alt="" /> <span id="loginTitle">Tracklet</span></div>
+        <p class="muted">Sign in to this location dashboard.</p>
+        <label>Email <input name="email" autocomplete="email" required /></label>
+        <label>Password <input name="password" type="password" autocomplete="current-password" required /></label>
+        <button class="primary">Sign In</button>
+        <p id="loginError" class="error"></p>
+      </form>
+    </div>
+
+    <div id="app" class="shell hidden">
+      <aside class="sidebar">
+        <div class="brand"><img src="/assets/generated-icon.png" alt="" /> <span id="brandName">Tracklet</span></div>
+        <nav class="nav">
+          <button data-view="dashboard" class="active">Dashboard</button>
+          <button data-view="packages">Packages</button>
+          <button data-view="storage">Storage</button>
+          <button data-view="invoices">Invoices</button>
+          <button data-view="tickets">Support</button>
+          <button data-view="users" data-manager>Users</button>
+          <button data-view="backups" data-manager>Backups</button>
+        </nav>
+        <button id="logout" class="ghost">Sign Out</button>
+      </aside>
+      <main class="main">
+        <section id="dashboard" class="section active">
+          <div class="topbar"><div class="page-title"><h1 id="pageName">Dashboard</h1><p>Package, invoice, and support operations.</p></div></div>
+          <div class="grid stats">
+            <div class="card stat"><div id="pendingPackages" class="value">0</div><div class="label">Pending Packages</div></div>
+            <div class="card stat"><div id="totalPackages" class="value">0</div><div class="label">Total Packages</div></div>
+            <div class="card stat"><div id="totalValue" class="value">$0.00</div><div class="label">Pending Value</div></div>
+            <div class="card stat"><div id="openTickets" class="value">0</div><div class="label">Open Tickets</div></div>
+          </div>
+          <div class="card"><h2>Recent Packages</h2><div id="recentPackages"></div></div>
+        </section>
+
+        <section id="packages" class="section">
+          <div class="topbar"><div class="page-title"><h1>Packages</h1><p>Add, search, deliver, and bulk-update parcels.</p></div></div>
+          <div class="grid two">
+            <form id="packageForm" class="card form-grid">
+              <h2>Add Package</h2>
+              <label>Tracking number <input name="trackingNumber" required /></label>
+              <label>Recipient name <input name="recipientName" required /></label>
+              <label>Weight <input name="weight" type="number" step="0.01" min="0.01" required /></label>
+              <label>Storage <select name="storageLocationId" id="packageStorage"></select></label>
+              <label>Notes <textarea name="notes"></textarea></label>
+              <button class="primary">Save Package</button>
+            </form>
+            <div class="card">
+              <div class="toolbar"><input id="packageSearch" placeholder="Search recipient or tracking..." /><button id="packageRefresh">Search</button></div>
+              <div id="packageTable"></div>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Search Cold Storage</h2>
+            <div class="toolbar"><input id="archiveSearch" placeholder="Archived recipient or tracking..." /><button id="archiveBtn">Search</button></div>
+            <div id="archiveTable"></div>
+          </div>
+        </section>
+
+        <section id="storage" class="section">
+          <div class="topbar"><div class="page-title"><h1>Storage</h1><p>Manage shelves, rooms, bins, or pickup areas.</p></div></div>
+          <form id="storageForm" class="card inline"><label>Name <input name="name" required /></label><button class="primary">Add Storage</button></form>
+          <div class="card"><div id="storageTable"></div></div>
+        </section>
+
+        <section id="invoices" class="section">
+          <div class="topbar"><div class="page-title"><h1>Invoices</h1><p>Create line-item invoices, mark paid/unpaid, or void.</p></div></div>
+          <div class="grid two">
+            <form id="invoiceForm" class="card form-grid">
+              <h2>Create Invoice</h2>
+              <label>Billed to <textarea name="billedTo" required></textarea></label>
+              <label>Due date <input name="dueDate" type="date" required /></label>
+              <div id="invoiceItems" class="form-grid"></div>
+              <button type="button" id="addInvoiceItem">Add Line Item</button>
+              <button class="primary">Create Invoice</button>
+            </form>
+            <div class="card"><div id="invoiceTable"></div></div>
+          </div>
+        </section>
+
+        <section id="tickets" class="section">
+          <div class="topbar"><div class="page-title"><h1>Support</h1><p>Create and reply to support requests.</p></div></div>
+          <div class="grid two">
+            <form id="ticketForm" class="card form-grid">
+              <h2>New Ticket</h2>
+              <label>Subject <input name="subject" required /></label>
+              <label>Message <textarea name="message" required></textarea></label>
+              <button class="primary">Submit Ticket</button>
+            </form>
+            <div class="card"><div id="ticketTable"></div></div>
+          </div>
+        </section>
+
+        <section id="users" class="section">
+          <div class="topbar"><div class="page-title"><h1>Users</h1><p>Managers can create users for this location.</p></div></div>
+          <div class="grid two">
+            <form id="userForm" class="card form-grid">
+              <h2>Create User</h2>
+              <label>Name <input name="name" /></label>
+              <label>Email <input name="email" type="email" required /></label>
+              <label>Password <input name="password" value="ChangeMe123!" required /></label>
+              <label>Role <select name="role"><option value="employee">Employee</option><option value="manager">Manager</option></select></label>
+              <button class="primary">Create User</button>
+            </form>
+            <div class="card"><div id="userTable"></div></div>
+          </div>
+        </section>
+
+        <section id="backups" class="section">
+          <div class="topbar"><div class="page-title"><h1>Backups</h1><p>Create a JSON snapshot stored in PostgreSQL.</p></div></div>
+          <div class="card"><button id="backupBtn" class="primary">Run Backup</button><p id="backupResult"></p></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/assets/instance.js"></script>
+  </body>
+</html>

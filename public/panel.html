@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tracklet Panel</title>
+    <link rel="stylesheet" href="/assets/app.css" />
+  </head>
+  <body>
+    <div id="login" class="login hidden">
+      <form class="card form-grid" id="loginForm">
+        <div class="brand"><img src="/assets/generated-icon.png" alt="" /> Tracklet Panel</div>
+        <p class="muted">Sign in with the initial admin from your Compose environment.</p>
+        <label>Email <input name="email" autocomplete="email" required /></label>
+        <label>Password <input name="password" type="password" autocomplete="current-password" required /></label>
+        <button class="primary">Sign In</button>
+        <p id="loginError" class="error"></p>
+      </form>
+    </div>
+
+    <div id="app" class="shell hidden">
+      <aside class="sidebar">
+        <div class="brand"><img src="/assets/generated-icon.png" alt="" /> Tracklet</div>
+        <nav class="nav">
+          <button data-view="dashboard" class="active">Dashboard</button>
+          <button data-view="instances">Instances</button>
+          <button data-view="nodes">Nodes</button>
+          <button data-view="tickets">Tickets</button>
+          <button data-view="archive">Cold Storage</button>
+        </nav>
+        <button id="logout" class="ghost">Sign Out</button>
+      </aside>
+      <main class="main">
+        <section id="dashboard" class="section active">
+          <div class="topbar"><div class="page-title"><h1>Panel Dashboard</h1><p>Global control plane for Tracklet instances.</p></div></div>
+          <div class="grid stats">
+            <div class="card stat"><div id="statInstances" class="value">0</div><div class="label">Instances</div></div>
+            <div class="card stat"><div id="statNodes" class="value">0</div><div class="label">Nodes</div></div>
+            <div class="card stat"><div id="statPackages" class="value">0</div><div class="label">Packages</div></div>
+            <div class="card stat"><div id="statTickets" class="value">0</div><div class="label">Open Tickets</div></div>
+          </div>
+          <div class="card"><h2>Recent Instances</h2><div id="recentInstances"></div></div>
+        </section>
+
+        <section id="instances" class="section">
+          <div class="topbar"><div class="page-title"><h1>Instances</h1><p>Create and operate isolated customer/location containers.</p></div></div>
+          <div class="grid two">
+            <form id="instanceForm" class="card form-grid">
+              <h2>Create Instance</h2>
+              <label>Name <input name="name" required placeholder="Acme Mailroom" /></label>
+              <label>Slug <input name="slug" placeholder="acme-mailroom" /></label>
+              <label>Node <select name="nodeId" id="nodeSelect" required></select></label>
+              <div class="inline">
+                <label>Admin email <input name="adminEmail" type="email" required /></label>
+                <label>Admin password <input name="adminPassword" value="ChangeMe123!" required /></label>
+              </div>
+              <div class="inline">
+                <label>Pricing <select name="pricingEnabled"><option value="false">Disabled</option><option value="true">Enabled</option></select></label>
+                <label>Rate/lb <input name="perPoundRate" type="number" step="0.01" value="0" /></label>
+              </div>
+              <label>Invoices <select name="invoiceEnabled"><option value="true">Enabled</option><option value="false">Disabled</option></select></label>
+              <button class="primary">Create Container</button>
+              <p id="instanceCreateResult" class="muted"></p>
+            </form>
+            <div class="card"><h2>All Instances</h2><div id="instanceTable"></div></div>
+          </div>
+        </section>
+
+        <section id="nodes" class="section">
+          <div class="topbar"><div class="page-title"><h1>Nodes</h1><p>Wings capable of running Tracklet containers.</p></div></div>
+          <div class="grid two">
+            <form id="nodeForm" class="card form-grid">
+              <h2>Register Node</h2>
+              <label>ID <input name="id" placeholder="wing-local" /></label>
+              <label>Name <input name="name" required placeholder="Local Wing" /></label>
+              <label>Base URL <input name="baseUrl" placeholder="http://wing:8080" /></label>
+              <label>Token <input name="token" placeholder="same as WING_TOKEN" /></label>
+              <button class="primary">Save Node</button>
+            </form>
+            <div class="card"><h2>Nodes</h2><div id="nodeTable"></div></div>
+          </div>
+        </section>
+
+        <section id="tickets" class="section">
+          <div class="topbar"><div class="page-title"><h1>Tickets</h1><p>Support requests from all customer instances.</p></div></div>
+          <div class="card"><div id="ticketTable"></div></div>
+        </section>
+
+        <section id="archive" class="section">
+          <div class="topbar"><div class="page-title"><h1>Cold Storage</h1><p>Move old delivered packages into condensed archive records.</p></div></div>
+          <form id="archiveForm" class="card inline">
+            <label>Archive packages older than months <input name="monthsOld" type="number" min="1" value="2" /></label>
+            <button class="primary">Run Archive Job</button>
+            <p id="archiveResult"></p>
+          </form>
+        </section>
+      </main>
+    </div>
+
+    <script src="/assets/panel.js"></script>
+  </body>
+</html>
