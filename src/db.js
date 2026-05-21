@@ -150,6 +150,7 @@ export async function migrate() {
       due_date date NOT NULL,
       status text NOT NULL DEFAULT 'unpaid',
       total numeric(10,2) NOT NULL DEFAULT 0,
+      paid_at timestamptz,
       created_by uuid REFERENCES instance_users(id) ON DELETE SET NULL,
       created_at timestamptz NOT NULL DEFAULT now(),
       UNIQUE(instance_id, invoice_number)
@@ -171,6 +172,12 @@ export async function migrate() {
       payload jsonb NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
+  `);
+
+  await query(`
+    ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid_at timestamptz;
+    ALTER TABLE instances ADD COLUMN IF NOT EXISTS invoice_logo text;
+    ALTER TABLE instances ADD COLUMN IF NOT EXISTS invoice_business_name text;
   `);
 
   const adminCount = await one(`SELECT count(*)::int AS count FROM panel_users`);

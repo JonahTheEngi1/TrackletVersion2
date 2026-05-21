@@ -30,7 +30,7 @@
           <button data-view="users" data-manager>Users</button>
           <button data-view="backups" data-manager>Backups</button>
         </nav>
-        <button id="logout" class="ghost">Sign Out</button>
+        <button id="logout" class="danger solid">Sign Out</button>
       </aside>
       <main class="main">
         <section id="dashboard" class="section active">
@@ -57,7 +57,19 @@
               <button class="primary">Save Package</button>
             </form>
             <div class="card">
-              <div class="toolbar"><input id="packageSearch" placeholder="Search recipient or tracking..." /><button id="packageRefresh">Search</button></div>
+              <div class="filters">
+                <label>Search <input id="packageSearch" placeholder="Recipient or tracking..." /></label>
+                <label>Storage <select id="packageStorageFilter"></select></label>
+                <label>Status <select id="packageStatusFilter"><option value="pending">Pending only</option><option value="all">All packages</option><option value="delivered">Delivered only</option></select></label>
+                <button id="packageRefresh">Apply</button>
+              </div>
+              <div id="bulkPackageBar" class="selection-bar hidden">
+                <strong><span id="selectedPackageCount">0</span> selected</strong>
+                <div class="row-actions">
+                  <button id="bulkDeliverBtn" class="primary">Mark Delivered</button>
+                  <button id="clearPackageSelection">Clear</button>
+                </div>
+              </div>
               <div id="packageTable"></div>
             </div>
           </div>
@@ -77,6 +89,17 @@
         <section id="invoices" class="section">
           <div class="topbar"><div class="page-title"><h1>Invoices</h1><p>Create line-item invoices, mark paid/unpaid, or void.</p></div></div>
           <div class="grid two">
+            <div class="card form-grid">
+              <h2>Invoice Branding</h2>
+              <div class="invoice-branding">
+                <img id="invoiceLogoPreview" class="invoice-logo-preview" alt="" />
+                <div class="form-grid">
+                  <label>Business name <input id="invoiceBusinessName" /></label>
+                  <label>Logo icon <input id="invoiceLogoInput" type="file" accept="image/*" /></label>
+                  <button id="saveInvoiceBranding" class="primary">Save Branding</button>
+                </div>
+              </div>
+            </div>
             <form id="invoiceForm" class="card form-grid">
               <h2>Create Invoice</h2>
               <label>Billed to <textarea name="billedTo" required></textarea></label>
@@ -85,8 +108,8 @@
               <button type="button" id="addInvoiceItem">Add Line Item</button>
               <button class="primary">Create Invoice</button>
             </form>
-            <div class="card"><div id="invoiceTable"></div></div>
           </div>
+          <div class="card"><div id="invoiceTable"></div></div>
         </section>
 
         <section id="tickets" class="section">

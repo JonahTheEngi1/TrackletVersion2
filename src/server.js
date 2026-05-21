@@ -309,6 +309,8 @@ function mountInstance() {
       slug: inst.slug,
       name: inst.name,
       invoiceEnabled: inst.invoice_enabled,
+      invoiceBusinessName: inst.invoice_business_name,
+      invoiceLogo: inst.invoice_logo,
       pricingEnabled: inst.pricing_enabled,
       isSuspended: inst.is_suspended,
       user: app.locals.lastUser || null,
@@ -332,6 +334,22 @@ function mountInstance() {
   app.post("/api/instance/logout", (req, res) => {
     delete req.session.instanceUser;
     res.json({ ok: true });
+  });
+
+  app.patch("/api/instance/settings", requireInstanceManager, async (req, res) => {
+    const updated = await one(
+      `UPDATE instances
+       SET invoice_logo = COALESCE($2, invoice_logo),
+           invoice_business_name = COALESCE($3, invoice_business_name)
+       WHERE id = $1
+       RETURNING id, name, invoice_business_name, invoice_logo`,
+      [
+        req.session.instanceUser.instanceId,
+        req.body.invoiceLogo === undefined ? null : req.body.invoiceLogo,
+        req.body.invoiceBusinessName === undefined ? null : req.body.invoiceBusinessName,
+      ],
+    );
+    res.json(updated);
   });
 
   app.get("/api/instance/me", (req, res) => res.json(req.session.instanceUser || null));
@@ -499,7 +517,18 @@ function mountInstance() {
 
   app.patch("/api/instance/invoices/:id", requireInstance, async (req, res) => {
     const status = req.body.status === "voided" ? "voided" : req.body.status === "paid" ? "paid" : "unpaid";
-    res.json(await one(`UPDATE invoices SET status = $3 WHERE id = $1 AND instance_id = $2 AND status <> 'voided' RETURNING *`, [req.params.id, req.session.instanceUser.instanceId, status]));
+    res.json(await one(
+      `UPDATE invoices
+       SET status = $3,
+           paid_at = CASE
+             WHEN $3 = 'paid' AND paid_at IS NULL THEN now()
+             WHEN $3 = 'unpaid' THEN NULL
+             ELSE paid_at
+           END
+       WHERE id = $1 AND instance_id = $2 AND status <> 'voided'
+       RETURNING *`,
+      [req.params.id, req.session.instanceUser.instanceId, status],
+    ));
   });
 
   app.post("/api/instance/backups", requireInstanceManager, async (req, res) => {
