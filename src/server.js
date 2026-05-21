@@ -192,6 +192,20 @@ function mountPanel() {
       await query(`UPDATE instances SET is_suspended = false WHERE id = $1`, [inst.id]);
       return res.json({ ok: true });
     }
+    if (req.body.action === "rebuild") {
+      const wingRes = await fetch(`${inst.base_url}/wing/instances`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${inst.token}` },
+        body: JSON.stringify(inst),
+      });
+      if (!wingRes.ok) return res.status(502).send(await wingRes.text());
+      const rebuilt = await wingRes.json();
+      const updated = await one(
+        `UPDATE instances SET container_name = $2, internal_url = $3, status = 'running' WHERE id = $1 RETURNING *`,
+        [inst.id, rebuilt.containerName, rebuilt.internalUrl],
+      );
+      return res.json({ ok: true, instance: updated });
+    }
     const wingRes = await fetch(`${inst.base_url}/wing/instances/${inst.id}/${req.body.action}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${inst.token}` },

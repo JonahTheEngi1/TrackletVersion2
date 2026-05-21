@@ -35,6 +35,7 @@ async function refresh() {
     { label: "Actions", render: r => `<div class="row-actions">
       <a class="button primary" href="/x/${r.slug}/" target="_blank">Open</a>
       <button onclick="act('${r.id}','restart')">Restart</button>
+      <button onclick="act('${r.id}','rebuild')">Rebuild</button>
       <button onclick="act('${r.id}','stop')">Stop</button>
       <button onclick="act('${r.id}','start')">Start</button>
       <button onclick="act('${r.id}','${r.is_suspended ? "unsuspend" : "suspend"}')">${r.is_suspended ? "Unsuspend" : "Suspend"}</button>
@@ -78,6 +79,7 @@ function syncPricingMode() {
 
 window.act = async (id, action) => {
   if (action === "destroy" && !confirm("Destroy this instance container? Data remains until you delete it from the database manually.")) return;
+  if (action === "rebuild" && !confirm("Rebuild this instance container with the latest image? Its database records will be preserved.")) return;
   await api(`/api/panel/instances/${id}/action`, { method: "POST", body: { action } });
   await refresh();
 };
