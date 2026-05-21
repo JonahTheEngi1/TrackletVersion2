@@ -1,14 +1,14 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: tracklet-postgres
+    container_name: trackletv2-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: tracklet
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tracklet_password_change_me}
       POSTGRES_DB: tracklet_platform
     volumes:
-      - tracklet-postgres-data:/var/lib/postgresql/data
+      - trackletv2-postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tracklet -d tracklet_platform"]
       interval: 5s
@@ -19,8 +19,8 @@ services:
 
   panel:
     build: .
-    image: tracklet-platform-app:latest
-    container_name: tracklet-panel
+    image: trackletv2-platform-app:latest
+    container_name: trackletv2-panel
     restart: unless-stopped
     environment:
       MODE: panel
@@ -37,8 +37,8 @@ services:
       - tracklet-net
 
   wing:
-    image: tracklet-platform-app:latest
-    container_name: tracklet-wing-01
+    image: trackletv2-platform-app:latest
+    container_name: trackletv2-wing-01
     restart: unless-stopped
     environment:
       MODE: wing
@@ -48,8 +48,8 @@ services:
       WING_NAME: Local Wing
       WING_BASE_URL: http://wing:8080
       WING_TOKEN: "${WING_TOKEN:-change-this-wing-token}"
-      INSTANCE_IMAGE: tracklet-platform-app:latest
-      DOCKER_NETWORK: tracklet-platform-net
+      INSTANCE_IMAGE: trackletv2-platform-app:latest
+      DOCKER_NETWORK: trackletv2-platform-net
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
@@ -62,10 +62,10 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
-    container_name: tracklet-nginx
+    container_name: trackletv2-nginx
     restart: unless-stopped
     ports:
-      - "${HTTP_PORT:-80}:80"
+      - "${HTTP_PORT:-8081}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
@@ -74,9 +74,9 @@ services:
       - tracklet-net
 
 volumes:
-  tracklet-postgres-data:
+  trackletv2-postgres-data:
 
 networks:
   tracklet-net:
-    name: tracklet-platform-net
+    name: trackletv2-platform-net
     driver: bridge

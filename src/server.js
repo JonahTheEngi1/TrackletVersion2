@@ -137,7 +137,7 @@ function mountPanel() {
         slug,
         req.body.name,
         node.id,
-        req.body.image || "tracklet-platform-app:latest",
+        req.body.image || "trackletv2-platform-app:latest",
         req.body.version || "latest",
         !!req.body.pricingEnabled,
         req.body.pricingType || "per_pound",
@@ -253,8 +253,8 @@ function mountWing() {
 
   app.post("/wing/instances", requireWing, async (req, res) => {
     const inst = req.body;
-    const containerName = `tracklet-inst-${inst.slug}`;
-    const networkName = process.env.DOCKER_NETWORK || "tracklet-platform-net";
+    const containerName = `trackletv2-inst-${inst.slug}`;
+    const networkName = process.env.DOCKER_NETWORK || "trackletv2-platform-net";
     const env = [
       `MODE=instance`,
       `PORT=8080`,
@@ -266,7 +266,7 @@ function mountWing() {
       await dockerRequest("POST", `/containers/${containerName}/stop`).catch(() => {});
       await dockerRequest("DELETE", `/containers/${containerName}?force=true`).catch(() => {});
       await dockerRequest("POST", `/containers/create?name=${containerName}`, {
-        Image: process.env.INSTANCE_IMAGE || inst.image || "tracklet-platform-app:latest",
+        Image: process.env.INSTANCE_IMAGE || inst.image || "trackletv2-platform-app:latest",
         Env: env,
         ExposedPorts: { "8080/tcp": {} },
         HostConfig: {

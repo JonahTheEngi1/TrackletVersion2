@@ -58,7 +58,7 @@ export async function migrate() {
       name text NOT NULL,
       node_id text REFERENCES nodes(id) ON DELETE SET NULL,
       container_name text,
-      image text NOT NULL DEFAULT 'tracklet-platform-app:latest',
+      image text NOT NULL DEFAULT 'trackletv2-platform-app:latest',
       version text NOT NULL DEFAULT 'latest',
       status text NOT NULL DEFAULT 'created',
       internal_url text,

@@ -13,7 +13,7 @@ Tracklet Platform is the production-oriented rewrite scaffold for Tracklet. It u
 1. Copy `.env.example` to `.env`.
 2. Change every secret value.
 3. In Portainer, deploy this directory as a Compose stack.
-4. Open `http://your-vps/`.
+4. Open `http://your-vps:8081/` unless you changed `HTTP_PORT`.
 5. Log in with `DEFAULT_ADMIN_EMAIL` and `DEFAULT_ADMIN_PASSWORD`.
 6. The default Compose file auto-registers `wing-local`.
 7. Create an instance from the Panel.
@@ -22,7 +22,7 @@ Tracklet Platform is the production-oriented rewrite scaffold for Tracklet. It u
 ## Services
 
 - `postgres`: PostgreSQL 16.
-- `panel`: Tracklet Panel, running from the `tracklet-platform-app:latest` image.
+- `panel`: Tracklet Panel, running from the `trackletv2-platform-app:latest` image.
 - `wing`: Tracklet Wing agent. It mounts `/var/run/docker.sock` so it can create instance containers.
 - `nginx`: public HTTP endpoint.
 
