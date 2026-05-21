@@ -20,6 +20,7 @@ services:
   panel:
     build: .
     image: trackletv2-platform-app:latest
+    pull_policy: build
     container_name: trackletv2-panel
     restart: unless-stopped
     environment:
@@ -37,7 +38,9 @@ services:
       - tracklet-net
 
   wing:
+    build: .
     image: trackletv2-platform-app:latest
+    pull_policy: build
     container_name: trackletv2-wing-01
     restart: unless-stopped
     environment:
@@ -63,6 +66,7 @@ services:
   nginx:
     build: ./nginx
     image: trackletv2-nginx:latest
+    pull_policy: build
     container_name: trackletv2-nginx
     restart: unless-stopped
     ports:
