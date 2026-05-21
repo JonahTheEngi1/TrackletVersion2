@@ -56,7 +56,13 @@
               </div>
               <div class="inline">
                 <label>Pricing <select name="pricingEnabled"><option value="false">Disabled</option><option value="true">Enabled</option></select></label>
-                <label>Rate/lb <input name="perPoundRate" type="number" step="0.01" value="0" /></label>
+                <label>Pricing model <select name="pricingType" id="pricingType"><option value="per_pound">Per pound</option><option value="range_based">Range based</option></select></label>
+                <label id="perPoundWrap">Rate/lb <input name="perPoundRate" type="number" step="0.01" value="0" /></label>
+              </div>
+              <div id="pricingTierWrap" class="form-grid hidden">
+                <h3>Weight Ranges</h3>
+                <div id="pricingTiers" class="tier-list"></div>
+                <button type="button" id="addPricingTier">Add Range</button>
               </div>
               <label>Invoices <select name="invoiceEnabled"><option value="true">Enabled</option><option value="false">Disabled</option></select></label>
               <button class="primary">Create Container</button>

@@ -146,6 +146,16 @@ function mountPanel() {
         req.body.invoiceBusinessName || req.body.name,
       ],
     );
+    if (req.body.pricingTiers && Array.isArray(req.body.pricingTiers)) {
+      for (const tier of req.body.pricingTiers) {
+        if (tier.minWeight !== "" && tier.maxWeight !== "" && tier.price !== "") {
+          await query(
+            `INSERT INTO pricing_tiers (instance_id, min_weight, max_weight, price) VALUES ($1,$2,$3,$4)`,
+            [inst.id, tier.minWeight, tier.maxWeight, tier.price],
+          );
+        }
+      }
+    }
     const adminPassword = req.body.adminPassword || "ChangeMe123!";
     await query(
       `INSERT INTO instance_users (instance_id, email, password_hash, name, role)
@@ -385,8 +395,9 @@ function mountInstance() {
     const instanceId = req.session.instanceUser.instanceId;
     const search = `%${req.query.q || ""}%`;
     const rows = await many(
-      `SELECT p.*, s.name AS storage_name FROM packages p
+      `SELECT p.*, s.name AS storage_name, u.name AS created_by_name, u.email AS created_by_email FROM packages p
        LEFT JOIN storage_locations s ON s.id = p.storage_location_id
+       LEFT JOIN instance_users u ON u.id = p.created_by
        WHERE p.instance_id = $1 AND ($2 = '%%' OR p.recipient_name ILIKE $2 OR p.tracking_number ILIKE $2)
        ORDER BY p.created_at DESC LIMIT 500`,
       [instanceId, search],
@@ -397,9 +408,9 @@ function mountInstance() {
 
   app.post("/api/instance/packages", requireInstance, async (req, res) => {
     const pkg = await one(
-      `INSERT INTO packages (instance_id, tracking_number, recipient_name, weight, storage_location_id, notes)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [req.session.instanceUser.instanceId, req.body.trackingNumber, req.body.recipientName, req.body.weight, req.body.storageLocationId || null, req.body.notes || null],
+      `INSERT INTO packages (instance_id, tracking_number, recipient_name, weight, storage_location_id, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.session.instanceUser.instanceId, req.body.trackingNumber, req.body.recipientName, req.body.weight, req.body.storageLocationId || null, req.body.notes || null, req.session.instanceUser.id],
     );
     res.json(pkg);
   });

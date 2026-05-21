@@ -7,6 +7,7 @@ let allPackages = [];
 let selectedPackages = new Set();
 let uploadedInvoiceLogo = null;
 let invoiceById = new Map();
+let expandedPackages = new Set();
 
 async function api(url, options = {}) {
   const res = await fetch(proxyBase + url, {
@@ -53,22 +54,55 @@ function filteredPackages() {
 
 function syncSelectionBar() {
   const count = selectedPackages.size;
+  const total = allPackages
+    .filter(pkg => selectedPackages.has(pkg.id))
+    .reduce((sum, pkg) => sum + Number(pkg.calculated_cost || 0), 0);
   $("#selectedPackageCount").textContent = count;
+  $("#selectedPackageTotal").textContent = `$${total.toFixed(2)}`;
   $("#bulkPackageBar").classList.toggle("hidden", count === 0);
 }
 
 function packageTable(pkgs, selectable = false) {
-  return table(pkgs, [
-    ...(selectable ? [{ label: `<input type="checkbox" id="selectAllPackages" />`, render: r => `<input type="checkbox" class="package-check" data-id="${r.id}" ${selectedPackages.has(r.id) ? "checked" : ""} ${r.is_delivered ? "disabled" : ""} />` }] : []),
-    { label: "Tracking", key: "tracking_number" },
-    { label: "Recipient", key: "recipient_name" },
-    { label: "Storage", render: r => r.storage_name || "-" },
-    { label: "Weight", render: r => `${r.weight} lb` },
-    { label: "Cost", render: r => `$${Number(r.calculated_cost || 0).toFixed(2)}` },
-    { label: "Status", render: r => r.is_delivered ? `<span class="badge ok">Delivered: ${r.picked_up_by_last_name || ""}</span>` : `<span class="badge warn">Pending</span>` },
-    { label: "Actions", render: r => r.is_delivered ? "" : `<button onclick="deliver('${r.id}')">Deliver</button>` },
-  ]);
+  if (!pkgs.length) return `<p class="muted">Nothing here yet.</p>`;
+  const colSpan = selectable ? 9 : 8;
+  const rows = pkgs.map(pkg => {
+    const creator = pkg.created_by_name || pkg.created_by_email || "Unknown";
+    const delivered = pkg.delivered_at ? new Date(pkg.delivered_at).toLocaleString() : "Not delivered";
+    const received = pkg.created_at ? new Date(pkg.created_at).toLocaleString() : "-";
+    const status = pkg.is_delivered
+      ? `<span class="badge ok">Delivered: ${pkg.picked_up_by_last_name || ""}</span>`
+      : `<span class="badge warn">Pending</span>`;
+    return `<tr>
+      ${selectable ? `<td><input type="checkbox" class="package-check" data-id="${pkg.id}" ${selectedPackages.has(pkg.id) ? "checked" : ""} ${pkg.is_delivered ? "disabled" : ""} /></td>` : ""}
+      <td><button class="ghost" onclick="togglePackageDetails('${pkg.id}')">${expandedPackages.has(pkg.id) ? "Hide" : "Details"}</button></td>
+      <td>${pkg.tracking_number}</td>
+      <td>${pkg.recipient_name}</td>
+      <td>${pkg.storage_name || "-"}</td>
+      <td>${pkg.weight} lb</td>
+      <td>$${Number(pkg.calculated_cost || 0).toFixed(2)}</td>
+      <td>${status}</td>
+      <td>${pkg.is_delivered ? "" : `<button onclick="deliver('${pkg.id}')">Deliver</button>`}</td>
+    </tr>
+    ${expandedPackages.has(pkg.id) ? `<tr class="detail-row"><td colspan="${colSpan}">
+      <div class="detail-grid">
+        <div><strong>Date Received</strong>${received}</div>
+        <div><strong>Date Delivered</strong>${delivered}</div>
+        <div><strong>Added By</strong>${creator}</div>
+        <div><strong>Notes</strong>${pkg.notes || "No notes"}</div>
+      </div>
+    </td></tr>` : ""}`;
+  }).join("");
+  return `<table><thead><tr>
+    ${selectable ? `<th><input type="checkbox" id="selectAllPackages" /></th>` : ""}
+    <th></th><th>Tracking</th><th>Recipient</th><th>Storage</th><th>Weight</th><th>Cost</th><th>Status</th><th>Actions</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
 }
+
+window.togglePackageDetails = (id) => {
+  if (expandedPackages.has(id)) expandedPackages.delete(id);
+  else expandedPackages.add(id);
+  refreshPackages(false);
+};
 
 function bindPackageSelection() {
   $$(".package-check").forEach(input => input.addEventListener("change", () => {
@@ -304,6 +338,30 @@ $("#bulkDeliverBtn").addEventListener("click", async () => {
   selectedPackages.clear();
   await refreshPackages();
   await refreshDashboard();
+});
+$("#printItemizedBtn").addEventListener("click", () => {
+  const selected = allPackages.filter(pkg => selectedPackages.has(pkg.id));
+  if (!selected.length) return;
+  const billedTo = selected[0].recipient_name;
+  const total = selected.reduce((sum, pkg) => sum + Number(pkg.calculated_cost || 0), 0);
+  const html = `<!doctype html><html><head><title>Itemized Parcel Receipt</title><style>
+    body{font-family:Arial,sans-serif;color:#182230;margin:40px}
+    .header{display:flex;justify-content:space-between;gap:24px;border-bottom:2px solid #182230;padding-bottom:18px}
+    h1{margin:0;font-size:30px;text-transform:uppercase}.muted{color:#667085}.bill{margin:24px 0;padding:16px;background:#f5f7fb;border-radius:8px}
+    table{width:100%;border-collapse:collapse}th,td{padding:12px;border-bottom:1px solid #d7dde8;text-align:left}th{text-transform:uppercase;font-size:12px;color:#667085}.num{text-align:right}
+    .total{text-align:right;font-size:24px;font-weight:800;margin-top:20px}
+  </style></head><body>
+    <div class="header"><div><h1>Itemized Parcel Receipt</h1><div class="muted">${meta.invoiceBusinessName || meta.name}</div></div><div class="muted">${new Date().toLocaleDateString()}</div></div>
+    <div class="bill"><strong>Billing to</strong><br>${billedTo}</div>
+    <table><thead><tr><th>Tracking</th><th class="num">Weight</th><th class="num">Cost</th></tr></thead><tbody>
+      ${selected.map(pkg => `<tr><td>${pkg.tracking_number}</td><td class="num">${pkg.weight} lb</td><td class="num">$${Number(pkg.calculated_cost || 0).toFixed(2)}</td></tr>`).join("")}
+    </tbody></table>
+    <div class="total">Total: $${total.toFixed(2)}</div>
+  </body></html>`;
+  const w = window.open("", "_blank");
+  w.document.write(html);
+  w.document.close();
+  w.print();
 });
 $("#packageSearch").addEventListener("keydown", e => { if (e.key === "Enter") refreshPackages(false); });
 $("#archiveBtn").addEventListener("click", async () => {

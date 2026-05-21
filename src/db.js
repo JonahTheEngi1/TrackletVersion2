@@ -107,6 +107,7 @@ export async function migrate() {
       weight numeric(10,2) NOT NULL,
       storage_location_id uuid REFERENCES storage_locations(id) ON DELETE SET NULL,
       notes text,
+      created_by uuid REFERENCES instance_users(id) ON DELETE SET NULL,
       is_delivered boolean NOT NULL DEFAULT false,
       picked_up_by_last_name text,
       delivered_at timestamptz,
@@ -178,6 +179,7 @@ export async function migrate() {
     ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid_at timestamptz;
     ALTER TABLE instances ADD COLUMN IF NOT EXISTS invoice_logo text;
     ALTER TABLE instances ADD COLUMN IF NOT EXISTS invoice_business_name text;
+    ALTER TABLE packages ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES instance_users(id) ON DELETE SET NULL;
   `);
 
   const adminCount = await one(`SELECT count(*)::int AS count FROM panel_users`);

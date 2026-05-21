@@ -58,6 +58,24 @@ async function refresh() {
   ]);
 }
 
+function addPricingTier(minWeight = "", maxWeight = "", price = "") {
+  const row = document.createElement("div");
+  row.className = "inline pricing-tier";
+  row.innerHTML = `<label>Min weight <input name="tierMin" type="number" step="0.01" value="${minWeight}" /></label>
+    <label>Max weight <input name="tierMax" type="number" step="0.01" value="${maxWeight}" /></label>
+    <label>Price <input name="tierPrice" type="number" step="0.01" value="${price}" /></label>
+    <button type="button" onclick="this.parentElement.remove()">Remove</button>`;
+  $("#pricingTiers").appendChild(row);
+}
+
+function syncPricingMode() {
+  const enabled = $("#instanceForm [name=pricingEnabled]").value === "true";
+  const range = $("#pricingType").value === "range_based";
+  $("#pricingType").disabled = !enabled;
+  $("#perPoundWrap").classList.toggle("hidden", !enabled || range);
+  $("#pricingTierWrap").classList.toggle("hidden", !enabled || !range);
+}
+
 window.act = async (id, action) => {
   if (action === "destroy" && !confirm("Destroy this instance container? Data remains until you delete it from the database manually.")) return;
   await api(`/api/panel/instances/${id}/action`, { method: "POST", body: { action } });
@@ -103,9 +121,15 @@ $("#nodeForm").addEventListener("submit", async (e) => {
 
 $("#instanceForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const body = Object.fromEntries(new FormData(e.target));
+  const fd = new FormData(e.target);
+  const body = Object.fromEntries(fd);
   body.pricingEnabled = body.pricingEnabled === "true";
   body.invoiceEnabled = body.invoiceEnabled === "true";
+  body.pricingTiers = fd.getAll("tierMin").map((minWeight, index) => ({
+    minWeight,
+    maxWeight: fd.getAll("tierMax")[index],
+    price: fd.getAll("tierPrice")[index],
+  }));
   $("#instanceCreateResult").textContent = "Provisioning container...";
   try {
     const result = await api("/api/panel/instances", { method: "POST", body });
@@ -116,6 +140,10 @@ $("#instanceForm").addEventListener("submit", async (e) => {
   }
 });
 
+$("#instanceForm [name=pricingEnabled]").addEventListener("change", syncPricingMode);
+$("#pricingType").addEventListener("change", syncPricingMode);
+$("#addPricingTier").addEventListener("click", () => addPricingTier());
+
 $("#archiveForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const result = await api("/api/panel/archive", { method: "POST", body: Object.fromEntries(new FormData(e.target)) });
@@ -125,3 +153,7 @@ $("#archiveForm").addEventListener("submit", async (e) => {
 boot().catch(() => {
   $("#login").classList.remove("hidden");
 });
+
+addPricingTier("1", "10", "5");
+addPricingTier("11", "20", "10");
+syncPricingMode();
