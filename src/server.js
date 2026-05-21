@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import http from "http";
-import { createProxyMiddleware } from "http-proxy-middleware";
+import { createProxyMiddleware, fixRequestBody } from "http-proxy-middleware";
 import { nanoid } from "nanoid";
 import { migrate, ensureLocalWing, query, one, many } from "./db.js";
 import {
@@ -232,6 +232,9 @@ function mountPanel() {
     createProxyMiddleware({
       target: "http://placeholder",
       changeOrigin: true,
+      on: {
+        proxyReq: fixRequestBody,
+      },
       router: async (req) => {
         const slug = req.params?.slug || req.url.split("/")[1];
         const inst = await one(`SELECT internal_url FROM instances WHERE slug = $1 AND status <> 'destroyed'`, [slug]);
