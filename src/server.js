@@ -38,6 +38,23 @@ function labelCode() {
   return `TL-${nanoid(10).toUpperCase()}`;
 }
 
+function normalizeTracking(value) {
+  return String(value || "").trim().replace(/_+$/g, "");
+}
+
+function parseQtrakDate(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function qtrakStorageName(row) {
+  return [row["Routed Location1 1"], row["Routed Location2 1"], row["Routed Location3 1"]]
+    .map(v => String(v || "").trim())
+    .filter(Boolean)
+    .join(" / ");
+}
+
 async function instanceByEnv() {
   const id = process.env.INSTANCE_ID;
   if (!id) throw new Error("INSTANCE_ID is required in instance mode");
@@ -253,6 +270,76 @@ function mountPanel() {
       [req.params.id, req.body.email, await hashPassword(req.body.password), req.body.name || null, req.body.role || "employee"],
     );
     res.json(user);
+  });
+
+  app.post("/api/panel/instances/:id/import/qtrak", requirePanel, async (req, res) => {
+    const instance = await one(`SELECT * FROM instances WHERE id = $1`, [req.params.id]);
+    if (!instance) return res.status(404).json({ error: "Instance not found" });
+    const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
+    let imported = 0;
+    let skipped = 0;
+    const storageCache = new Map();
+
+    for (const row of rows) {
+      const tracking = normalizeTracking(row["Tracking Number"]);
+      if (!tracking) {
+        skipped++;
+        continue;
+      }
+      const exists = await one(`SELECT id FROM packages WHERE instance_id = $1 AND tracking_number = $2`, [instance.id, tracking]);
+      if (exists) {
+        skipped++;
+        continue;
+      }
+
+      const routeDate = parseQtrakDate(row["Date Routed 1"]) || new Date();
+      const deliveredDate = parseQtrakDate(row["Date Delivered 1"]);
+      const statusRaw = String(row.Status || "").toLowerCase();
+      const isDelivered = statusRaw.includes("delivered") || !!deliveredDate;
+      const status = isDelivered ? "delivered" : statusRaw.includes("route") ? "routed" : "received";
+      const recipient = String(row["Routed To 1"] || row["Delivered To 1"] || "Unknown Recipient").trim();
+      const storageName = qtrakStorageName(row);
+      let storageId = null;
+      if (storageName) {
+        if (!storageCache.has(storageName)) {
+          const storage = await one(
+            `INSERT INTO storage_locations (instance_id, name)
+             VALUES ($1,$2)
+             ON CONFLICT DO NOTHING
+             RETURNING id`,
+            [instance.id, storageName],
+          ) || await one(`SELECT id FROM storage_locations WHERE instance_id = $1 AND name = $2`, [instance.id, storageName]);
+          storageCache.set(storageName, storage?.id || null);
+        }
+        storageId = storageCache.get(storageName);
+      }
+
+      await query(
+        `INSERT INTO packages (
+          instance_id, tracking_number, recipient_name, weight, storage_location_id, notes, status, label_code,
+          is_delivered, picked_up_by_last_name, delivery_notes, routed_at, delivered_at, created_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [
+          instance.id,
+          tracking,
+          recipient,
+          "0.01",
+          storageId,
+          [row.Item ? `Carrier: ${row.Item}` : "", row["Route Notes 1"] ? `Route: ${row["Route Notes 1"]}` : ""].filter(Boolean).join("\n") || null,
+          status,
+          labelCode(),
+          isDelivered,
+          row["Delivered To 1"] || null,
+          row["Delivered Notes 1"] || null,
+          routeDate,
+          deliveredDate,
+          routeDate,
+        ],
+      );
+      imported++;
+    }
+
+    res.json({ imported, skipped, total: rows.length });
   });
 
   app.get("/api/panel/tickets", requirePanel, async (_req, res) => {

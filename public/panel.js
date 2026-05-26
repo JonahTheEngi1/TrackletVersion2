@@ -20,6 +20,38 @@ function table(rows, cols) {
   ).join("")}</tbody></table>`;
 }
 
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (quoted && ch === '"' && next === '"') {
+      cell += '"';
+      i++;
+    } else if (ch === '"') {
+      quoted = !quoted;
+    } else if (ch === "," && !quoted) {
+      row.push(cell);
+      cell = "";
+    } else if ((ch === "\n" || ch === "\r") && !quoted) {
+      if (ch === "\r" && next === "\n") i++;
+      row.push(cell);
+      if (row.some(v => v.trim() !== "")) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += ch;
+    }
+  }
+  row.push(cell);
+  if (row.some(v => v.trim() !== "")) rows.push(row);
+  const headers = rows.shift()?.map(h => h.trim()) || [];
+  return rows.map(values => Object.fromEntries(headers.map((h, i) => [h, values[i] || ""])));
+}
+
 async function refresh() {
   overview = await api("/api/panel/overview");
   $("#statInstances").textContent = overview.instances.length;
@@ -27,6 +59,7 @@ async function refresh() {
   $("#statPackages").textContent = overview.packageCount;
   $("#statTickets").textContent = overview.openTicketCount;
   $("#nodeSelect").innerHTML = overview.nodes.map(n => `<option value="${n.id}">${n.name}</option>`).join("");
+  $("#qtrakInstance").innerHTML = overview.instances.map(i => `<option value="${i.id}">${i.name} (${i.slug})</option>`).join("");
   const instanceCols = [
     { label: "Name", render: r => `<strong>${r.name}</strong><br><span class="muted">${r.slug}</span>` },
     { label: "Node", key: "node_id" },
@@ -150,6 +183,31 @@ $("#archiveForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const result = await api("/api/panel/archive", { method: "POST", body: Object.fromEntries(new FormData(e.target)) });
   $("#archiveResult").textContent = `Archived ${result.archivedCount} packages.`;
+});
+
+$("#qtrakCsv").addEventListener("change", async () => {
+  const file = $("#qtrakCsv").files?.[0];
+  if (!file) return;
+  const rows = parseCsv(await file.text());
+  $("#qtrakPreview").innerHTML = table(rows.slice(0, 5), [
+    { label: "Carrier", key: "Item" },
+    { label: "Tracking", render: r => String(r["Tracking Number"] || "").replace(/_+$/g, "") },
+    { label: "Status", key: "Status" },
+    { label: "Received", key: "Date Routed 1" },
+    { label: "Recipient", key: "Routed To 1" },
+  ]);
+});
+
+$("#qtrakImportForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const file = $("#qtrakCsv").files?.[0];
+  const instanceId = $("#qtrakInstance").value;
+  if (!file || !instanceId) return;
+  $("#qtrakImportResult").textContent = "Reading CSV...";
+  const rows = parseCsv(await file.text());
+  $("#qtrakImportResult").textContent = `Importing ${rows.length} rows...`;
+  const result = await api(`/api/panel/instances/${instanceId}/import/qtrak`, { method: "POST", body: { rows } });
+  $("#qtrakImportResult").textContent = `Imported ${result.imported}. Skipped ${result.skipped}. Total rows ${result.total}.`;
 });
 
 boot().catch(() => {

@@ -25,6 +25,7 @@
           <button data-view="dashboard" class="active">Dashboard</button>
           <button data-view="instances">Instances</button>
           <button data-view="nodes">Nodes</button>
+          <button data-view="import">QTrak Import</button>
           <button data-view="tickets">Tickets</button>
           <button data-view="archive">Cold Storage</button>
         </nav>
@@ -84,6 +85,24 @@
               <button class="primary">Save Node</button>
             </form>
             <div class="card"><h2>Nodes</h2><div id="nodeTable"></div></div>
+          </div>
+        </section>
+
+        <section id="import" class="section">
+          <div class="topbar"><div class="page-title"><h1>QTrak Import</h1><p>Import Advanced Search Report CSV data into a selected Tracklet instance.</p></div></div>
+          <div class="grid two">
+            <form id="qtrakImportForm" class="card form-grid">
+              <h2>Import Packages</h2>
+              <label>Target instance <select id="qtrakInstance" required></select></label>
+              <label>QTrak Advanced Search Report CSV <input id="qtrakCsv" type="file" accept=".csv,text/csv" required /></label>
+              <p class="muted">Tracking numbers are de-duplicated per instance. Missing weights import as 0.01 lb. Route date becomes the received date.</p>
+              <button class="primary">Import CSV</button>
+              <p id="qtrakImportResult" class="muted"></p>
+            </form>
+            <div class="card">
+              <h2>Detected Mapping</h2>
+              <div id="qtrakPreview" class="muted">Choose a CSV to preview the first few rows.</div>
+            </div>
           </div>
         </section>
 
