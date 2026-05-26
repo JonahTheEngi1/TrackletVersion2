@@ -99,17 +99,42 @@ export async function migrate() {
       price numeric(10,2) NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS contacts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      instance_id uuid NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
+      first_name text,
+      last_name text NOT NULL,
+      email text,
+      contact_code text,
+      mailbox text,
+      phone text,
+      department text,
+      building text,
+      forward_address text,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+
     CREATE TABLE IF NOT EXISTS packages (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       instance_id uuid NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
       tracking_number text NOT NULL,
       recipient_name text NOT NULL,
+      contact_id uuid REFERENCES contacts(id) ON DELETE SET NULL,
       weight numeric(10,2) NOT NULL,
       storage_location_id uuid REFERENCES storage_locations(id) ON DELETE SET NULL,
       notes text,
       created_by uuid REFERENCES instance_users(id) ON DELETE SET NULL,
+      status text NOT NULL DEFAULT 'received',
+      label_code text,
+      routed_at timestamptz,
+      stored_at timestamptz,
+      attempted_at timestamptz,
       is_delivered boolean NOT NULL DEFAULT false,
       picked_up_by_last_name text,
+      delivery_notes text,
+      delivery_signature text,
+      delivery_photo text,
+      id_verification text,
       delivered_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
@@ -173,6 +198,30 @@ export async function migrate() {
       payload jsonb NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
+
+    CREATE TABLE IF NOT EXISTS notification_templates (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      instance_id uuid NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
+      event text NOT NULL,
+      enabled boolean NOT NULL DEFAULT false,
+      subject text NOT NULL,
+      body text NOT NULL,
+      delay_hours numeric(10,2) NOT NULL DEFAULT 0,
+      UNIQUE(instance_id, event)
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_logs (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      instance_id uuid NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
+      package_id uuid REFERENCES packages(id) ON DELETE SET NULL,
+      contact_id uuid REFERENCES contacts(id) ON DELETE SET NULL,
+      event text NOT NULL,
+      recipient text,
+      subject text,
+      body text,
+      status text NOT NULL DEFAULT 'queued',
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
   `);
 
   await query(`
@@ -180,6 +229,16 @@ export async function migrate() {
     ALTER TABLE instances ADD COLUMN IF NOT EXISTS invoice_logo text;
     ALTER TABLE instances ADD COLUMN IF NOT EXISTS invoice_business_name text;
     ALTER TABLE packages ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES instance_users(id) ON DELETE SET NULL;
+    ALTER TABLE packages ADD COLUMN IF NOT EXISTS contact_id uuid REFERENCES contacts(id) ON DELETE SET NULL;
+    ALTER TABLE packages ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'received';
+    ALTER TABLE packages ADD COLUMN IF NOT EXISTS label_code text;
+    ALTER TABLE packages ADD COLUMN IF NOT EXISTS routed_at timestamptz;
+    ALTER TABLE packages ADD COLUMN IF NOT EXISTS stored_at timestamptz;
+    ALTER TABLE packages ADD COLUMN IF NOT EXISTS attempted_at timestamptz;
+    ALTER TABLE packages ADD COLUMN IF NOT EXISTS delivery_notes text;
+    ALTER TABLE packages ADD COLUMN IF NOT EXISTS delivery_signature text;
+    ALTER TABLE packages ADD COLUMN IF NOT EXISTS delivery_photo text;
+    ALTER TABLE packages ADD COLUMN IF NOT EXISTS id_verification text;
   `);
 
   const adminCount = await one(`SELECT count(*)::int AS count FROM panel_users`);

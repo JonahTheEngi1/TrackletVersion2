@@ -34,6 +34,10 @@ function cents(n) {
   return Number.parseFloat(n || 0).toFixed(2);
 }
 
+function labelCode() {
+  return `TL-${nanoid(10).toUpperCase()}`;
+}
+
 async function instanceByEnv() {
   const id = process.env.INSTANCE_ID;
   if (!id) throw new Error("INSTANCE_ID is required in instance mode");
@@ -53,6 +57,28 @@ async function calculateCost(instanceId, weight) {
   if (tier) return Number(tier.price);
   const top = await one(`SELECT * FROM pricing_tiers WHERE instance_id = $1 ORDER BY max_weight DESC LIMIT 1`, [instanceId]);
   return top ? Number(top.price) : 0;
+}
+
+async function logNotification(instanceId, event, pkg) {
+  const template = await one(
+    `SELECT * FROM notification_templates WHERE instance_id = $1 AND event = $2 AND enabled = true`,
+    [instanceId, event],
+  );
+  if (!template) return;
+  const contact = pkg.contact_id ? await one(`SELECT * FROM contacts WHERE id = $1 AND instance_id = $2`, [pkg.contact_id, instanceId]) : null;
+  const recipient = contact?.email || null;
+  const vars = {
+    recipient: pkg.recipient_name,
+    tracking: pkg.tracking_number,
+    location: pkg.storage_name || "",
+    status: pkg.status || event,
+  };
+  const render = (text) => String(text).replace(/\{\{(\w+)\}\}/g, (_m, key) => vars[key] ?? "");
+  await query(
+    `INSERT INTO notification_logs (instance_id, package_id, contact_id, event, recipient, subject, body, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [instanceId, pkg.id, pkg.contact_id || null, event, recipient, render(template.subject), render(template.body), recipient ? "queued" : "missing_recipient"],
+  );
 }
 
 async function dockerRequest(method, apiPath, body) {
@@ -396,6 +422,52 @@ function mountInstance() {
     res.json(await many(`SELECT * FROM storage_locations WHERE instance_id = $1 ORDER BY name`, [req.session.instanceUser.instanceId]));
   });
 
+  app.get("/api/instance/contacts", requireInstance, async (req, res) => {
+    const q = `%${req.query.q || ""}%`;
+    res.json(await many(
+      `SELECT * FROM contacts
+       WHERE instance_id = $1
+         AND ($2 = '%%' OR first_name ILIKE $2 OR last_name ILIKE $2 OR email ILIKE $2 OR contact_code ILIKE $2 OR mailbox ILIKE $2)
+       ORDER BY last_name, first_name LIMIT 1000`,
+      [req.session.instanceUser.instanceId, q],
+    ));
+  });
+
+  app.post("/api/instance/contacts", requireInstanceManager, async (req, res) => {
+    const c = await one(
+      `INSERT INTO contacts (instance_id, first_name, last_name, email, contact_code, mailbox, phone, department, building, forward_address)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [
+        req.session.instanceUser.instanceId,
+        req.body.firstName || null,
+        req.body.lastName,
+        req.body.email || null,
+        req.body.contactCode || null,
+        req.body.mailbox || null,
+        req.body.phone || null,
+        req.body.department || null,
+        req.body.building || null,
+        req.body.forwardAddress || null,
+      ],
+    );
+    res.json(c);
+  });
+
+  app.post("/api/instance/contacts/import", requireInstanceManager, async (req, res) => {
+    const rows = Array.isArray(req.body.contacts) ? req.body.contacts : [];
+    let imported = 0;
+    for (const row of rows) {
+      if (!row.lastName) continue;
+      await query(
+        `INSERT INTO contacts (instance_id, first_name, last_name, email, contact_code, mailbox, phone, department, building, forward_address)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [req.session.instanceUser.instanceId, row.firstName || null, row.lastName, row.email || null, row.contactCode || null, row.mailbox || null, row.phone || null, row.department || null, row.building || null, row.forwardAddress || null],
+      );
+      imported++;
+    }
+    res.json({ imported });
+  });
+
   app.post("/api/instance/storage", requireInstanceManager, async (req, res) => {
     res.json(await one(`INSERT INTO storage_locations (instance_id, name) VALUES ($1,$2) RETURNING *`, [req.session.instanceUser.instanceId, req.body.name]));
   });
@@ -405,13 +477,46 @@ function mountInstance() {
     res.json({ ok: true });
   });
 
+  app.get("/api/instance/notifications", requireInstanceManager, async (req, res) => {
+    const instanceId = req.session.instanceUser.instanceId;
+    const defaults = [
+      ["received", "Package received for {{recipient}}", "Your package {{tracking}} has been received."],
+      ["routed", "Package routed for {{recipient}}", "Your package {{tracking}} has been routed. {{location}}"],
+      ["stored", "Package stored for {{recipient}}", "Your package {{tracking}} is ready for pickup. {{location}}"],
+      ["attempted", "Delivery attempted for {{recipient}}", "We attempted delivery for package {{tracking}}."],
+      ["delivered", "Package delivered for {{recipient}}", "Your package {{tracking}} has been delivered."],
+    ];
+    for (const [event, subject, body] of defaults) {
+      await query(
+        `INSERT INTO notification_templates (instance_id, event, subject, body)
+         VALUES ($1,$2,$3,$4) ON CONFLICT (instance_id, event) DO NOTHING`,
+        [instanceId, event, subject, body],
+      );
+    }
+    const templates = await many(`SELECT * FROM notification_templates WHERE instance_id = $1 ORDER BY event`, [instanceId]);
+    const logs = await many(`SELECT * FROM notification_logs WHERE instance_id = $1 ORDER BY created_at DESC LIMIT 100`, [instanceId]);
+    res.json({ templates, logs });
+  });
+
+  app.patch("/api/instance/notifications/:id", requireInstanceManager, async (req, res) => {
+    res.json(await one(
+      `UPDATE notification_templates
+       SET enabled = COALESCE($3, enabled), subject = COALESCE($4, subject), body = COALESCE($5, body), delay_hours = COALESCE($6, delay_hours)
+       WHERE id = $1 AND instance_id = $2 RETURNING *`,
+      [req.params.id, req.session.instanceUser.instanceId, req.body.enabled, req.body.subject || null, req.body.body || null, req.body.delayHours ?? null],
+    ));
+  });
+
   app.get("/api/instance/packages", requireInstance, async (req, res) => {
     const instanceId = req.session.instanceUser.instanceId;
     const search = `%${req.query.q || ""}%`;
     const rows = await many(
-      `SELECT p.*, s.name AS storage_name, u.name AS created_by_name, u.email AS created_by_email FROM packages p
+      `SELECT p.*, s.name AS storage_name, u.name AS created_by_name, u.email AS created_by_email,
+              c.email AS contact_email, c.mailbox AS contact_mailbox, c.department AS contact_department, c.building AS contact_building
+       FROM packages p
        LEFT JOIN storage_locations s ON s.id = p.storage_location_id
        LEFT JOIN instance_users u ON u.id = p.created_by
+       LEFT JOIN contacts c ON c.id = p.contact_id
        WHERE p.instance_id = $1 AND ($2 = '%%' OR p.recipient_name ILIKE $2 OR p.tracking_number ILIKE $2)
        ORDER BY p.created_at DESC LIMIT 500`,
       [instanceId, search],
@@ -422,23 +527,45 @@ function mountInstance() {
 
   app.post("/api/instance/packages", requireInstance, async (req, res) => {
     const pkg = await one(
-      `INSERT INTO packages (instance_id, tracking_number, recipient_name, weight, storage_location_id, notes, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [req.session.instanceUser.instanceId, req.body.trackingNumber, req.body.recipientName, req.body.weight, req.body.storageLocationId || null, req.body.notes || null, req.session.instanceUser.id],
+      `INSERT INTO packages (instance_id, tracking_number, recipient_name, contact_id, weight, storage_location_id, notes, created_by, status, label_code)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'received',$9) RETURNING *`,
+      [req.session.instanceUser.instanceId, req.body.trackingNumber, req.body.recipientName, req.body.contactId || null, req.body.weight, req.body.storageLocationId || null, req.body.notes || null, req.session.instanceUser.id, labelCode()],
     );
+    await logNotification(req.session.instanceUser.instanceId, "received", pkg);
     res.json(pkg);
   });
 
   app.patch("/api/instance/packages/:id", requireInstance, async (req, res) => {
+    const nextStatus = req.body.status || (req.body.isDelivered ? "delivered" : null);
     const pkg = await one(
       `UPDATE packages SET
         recipient_name = COALESCE($3, recipient_name),
-        is_delivered = COALESCE($4, is_delivered),
-        picked_up_by_last_name = COALESCE($5, picked_up_by_last_name),
-        delivered_at = CASE WHEN $4 = true THEN now() ELSE delivered_at END
+        status = COALESCE($4, status),
+        is_delivered = CASE WHEN $4 = 'delivered' THEN true ELSE COALESCE($5, is_delivered) END,
+        routed_at = CASE WHEN $4 = 'routed' AND routed_at IS NULL THEN now() ELSE routed_at END,
+        stored_at = CASE WHEN $4 = 'stored' AND stored_at IS NULL THEN now() ELSE stored_at END,
+        attempted_at = CASE WHEN $4 = 'attempted' THEN now() ELSE attempted_at END,
+        delivered_at = CASE WHEN $4 = 'delivered' OR $5 = true THEN now() ELSE delivered_at END,
+        delivery_notes = COALESCE($7, delivery_notes),
+        delivery_signature = COALESCE($8, delivery_signature),
+        delivery_photo = COALESCE($9, delivery_photo),
+        id_verification = COALESCE($10, id_verification),
+        picked_up_by_last_name = COALESCE($6, picked_up_by_last_name)
        WHERE id = $1 AND instance_id = $2 RETURNING *`,
-      [req.params.id, req.session.instanceUser.instanceId, req.body.recipientName || null, req.body.isDelivered, req.body.pickedUpByLastName || null],
+      [
+        req.params.id,
+        req.session.instanceUser.instanceId,
+        req.body.recipientName || null,
+        nextStatus,
+        req.body.isDelivered,
+        req.body.pickedUpByLastName || null,
+        req.body.deliveryNotes || null,
+        req.body.deliverySignature || null,
+        req.body.deliveryPhoto || null,
+        req.body.idVerification || null,
+      ],
     );
+    if (nextStatus) await logNotification(req.session.instanceUser.instanceId, nextStatus, pkg);
     res.json(pkg);
   });
 
@@ -448,6 +575,7 @@ function mountInstance() {
       await query(
         `UPDATE packages SET
           recipient_name = COALESCE($3, recipient_name),
+          status = CASE WHEN $4 = true THEN 'delivered' ELSE status END,
           is_delivered = COALESCE($4, is_delivered),
           picked_up_by_last_name = COALESCE($5, picked_up_by_last_name),
           delivered_at = CASE WHEN $4 = true THEN now() ELSE delivered_at END
@@ -463,6 +591,24 @@ function mountInstance() {
       `SELECT * FROM archived_packages WHERE instance_id = $1 AND (recipient_name ILIKE $2 OR tracking_number ILIKE $2) ORDER BY delivered_at DESC`,
       [req.session.instanceUser.instanceId, `%${req.query.q || ""}%`],
     ));
+  });
+
+  app.get("/api/instance/reports", requireInstance, async (req, res) => {
+    const instanceId = req.session.instanceUser.instanceId;
+    const from = req.query.from || "1970-01-01";
+    const to = req.query.to || "2999-12-31";
+    const summary = await many(
+      `SELECT status, count(*)::int AS count FROM packages WHERE instance_id = $1 AND created_at::date BETWEEN $2 AND $3 GROUP BY status ORDER BY status`,
+      [instanceId, from, to],
+    );
+    const packages = await many(
+      `SELECT tracking_number, recipient_name, weight, status, created_at, routed_at, stored_at, attempted_at, delivered_at, picked_up_by_last_name
+       FROM packages WHERE instance_id = $1 AND created_at::date BETWEEN $2 AND $3 ORDER BY created_at DESC LIMIT 2000`,
+      [instanceId, from, to],
+    );
+    const undelivered = packages.filter(p => p.status !== "delivered");
+    const stale = packages.filter(p => p.status !== "delivered" && (Date.now() - new Date(p.created_at).getTime()) > 7 * 24 * 60 * 60 * 1000);
+    res.json({ summary, packages, undelivered, stale });
   });
 
   app.get("/api/instance/users", requireInstanceManager, async (req, res) => {

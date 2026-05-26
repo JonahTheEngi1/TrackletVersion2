@@ -8,6 +8,8 @@ let selectedPackages = new Set();
 let uploadedInvoiceLogo = null;
 let invoiceById = new Map();
 let expandedPackages = new Set();
+let contacts = [];
+let reportData = null;
 
 async function api(url, options = {}) {
   const res = await fetch(proxyBase + url, {
@@ -30,6 +32,30 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function csvEscape(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
+function chooseImage() {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return resolve("");
+      if (file.size > 1000000) {
+        alert("Please choose a photo under 1MB.");
+        return resolve("");
+      }
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  });
+}
+
 async function refreshDashboard() {
   const d = await api("/api/instance/dashboard");
   $("#pendingPackages").textContent = d.pendingPackages;
@@ -47,7 +73,7 @@ function filteredPackages() {
   return allPackages.filter(pkg => {
     const matchesText = !q || String(pkg.recipient_name).toLowerCase().includes(q) || String(pkg.tracking_number).toLowerCase().includes(q);
     const matchesStorage = storage === "all" || (storage === "unassigned" ? !pkg.storage_location_id : pkg.storage_location_id === storage);
-    const matchesStatus = status === "all" || (status === "pending" ? !pkg.is_delivered : pkg.is_delivered);
+    const matchesStatus = status === "all" || (status === "pending" ? pkg.status !== "delivered" : pkg.status === status);
     return matchesText && matchesStorage && matchesStatus;
   });
 }
@@ -69,9 +95,8 @@ function packageTable(pkgs, selectable = false) {
     const creator = pkg.created_by_name || pkg.created_by_email || "Unknown";
     const delivered = pkg.delivered_at ? new Date(pkg.delivered_at).toLocaleString() : "Not delivered";
     const received = pkg.created_at ? new Date(pkg.created_at).toLocaleString() : "-";
-    const status = pkg.is_delivered
-      ? `<span class="badge ok">Delivered: ${pkg.picked_up_by_last_name || ""}</span>`
-      : `<span class="badge warn">Pending</span>`;
+    const statusClass = pkg.status === "delivered" ? "ok" : pkg.status === "attempted" ? "warn" : pkg.status === "routed" ? "route" : pkg.status === "stored" ? "stored" : "received";
+    const status = `<span class="badge ${statusClass}">${pkg.status || (pkg.is_delivered ? "delivered" : "received")}</span>${pkg.picked_up_by_last_name ? `<br><span class="muted">${pkg.picked_up_by_last_name}</span>` : ""}`;
     return `<tr>
       ${selectable ? `<td><input type="checkbox" class="package-check" data-id="${pkg.id}" ${selectedPackages.has(pkg.id) ? "checked" : ""} ${pkg.is_delivered ? "disabled" : ""} /></td>` : ""}
       <td><button class="ghost" onclick="togglePackageDetails('${pkg.id}')">${expandedPackages.has(pkg.id) ? "Hide" : "Details"}</button></td>
@@ -81,14 +106,21 @@ function packageTable(pkgs, selectable = false) {
       <td>${pkg.weight} lb</td>
       <td>$${Number(pkg.calculated_cost || 0).toFixed(2)}</td>
       <td>${status}</td>
-      <td>${pkg.is_delivered ? "" : `<button onclick="deliver('${pkg.id}')">Deliver</button>`}</td>
+      <td><div class="row-actions">
+        ${pkg.is_delivered ? "" : `<button onclick="deliver('${pkg.id}')">Deliver</button>`}
+        ${pkg.is_delivered ? "" : `<button onclick="setPackageStatus('${pkg.id}','routed')">Route</button><button onclick="setPackageStatus('${pkg.id}','stored')">Store</button><button onclick="setPackageStatus('${pkg.id}','attempted')">Attempted</button>`}
+        <button onclick="printLabel('${pkg.id}')">Label</button>
+      </div></td>
     </tr>
     ${expandedPackages.has(pkg.id) ? `<tr class="detail-row"><td colspan="${colSpan}">
       <div class="detail-grid">
         <div><strong>Date Received</strong>${received}</div>
         <div><strong>Date Delivered</strong>${delivered}</div>
         <div><strong>Added By</strong>${creator}</div>
-        <div><strong>Notes</strong>${pkg.notes || "No notes"}</div>
+        <div><strong>Contact</strong>${pkg.contact_email || pkg.contact_mailbox || "No contact linked"}</div>
+        <div><strong>Route/Store</strong>${pkg.routed_at ? `Routed ${new Date(pkg.routed_at).toLocaleString()}` : "Not routed"}<br>${pkg.stored_at ? `Stored ${new Date(pkg.stored_at).toLocaleString()}` : "Not stored"}</div>
+        <div><strong>Proof</strong>${pkg.delivery_signature ? "Signature captured" : "No signature"}<br>${pkg.delivery_photo ? "Photo attached" : "No photo"}<br>${pkg.id_verification || ""}</div>
+        <div><strong>Notes</strong>${pkg.notes || "No notes"}${pkg.delivery_notes ? `<br>${pkg.delivery_notes}` : ""}</div>
       </div>
     </td></tr>` : ""}`;
   }).join("");
@@ -102,6 +134,26 @@ window.togglePackageDetails = (id) => {
   if (expandedPackages.has(id)) expandedPackages.delete(id);
   else expandedPackages.add(id);
   refreshPackages(false);
+};
+
+window.setPackageStatus = async (id, status) => {
+  await api(`/api/instance/packages/${id}`, { method: "PATCH", body: { status } });
+  await refreshPackages();
+  await refreshDashboard();
+};
+
+window.printLabel = (id) => {
+  const pkg = allPackages.find(p => p.id === id);
+  if (!pkg) return;
+  const code = pkg.label_code || pkg.tracking_number;
+  const html = `<!doctype html><html><head><title>Package Label</title><style>
+    body{font-family:Arial,sans-serif;margin:18px}.label{width:320px;border:2px solid #182230;padding:16px;border-radius:10px}
+    h1{font-size:18px;margin:0 0 10px}.big{font-size:20px;font-weight:800}.barcode{font-family:monospace;letter-spacing:2px;border-top:1px solid #222;border-bottom:1px solid #222;padding:10px 0;margin:12px 0}
+  </style></head><body><div class="label"><h1>${meta.name}</h1><div class="big">${pkg.recipient_name}</div><div>${pkg.storage_name || "Unassigned"}</div><div class="barcode">${code}</div><div>${pkg.tracking_number}</div><div>${pkg.weight} lb</div></div></body></html>`;
+  const w = window.open("", "_blank");
+  w.document.write(html);
+  w.document.close();
+  w.print();
 };
 
 function bindPackageSelection() {
@@ -126,10 +178,26 @@ function bindPackageSelection() {
 window.deliver = async (id) => {
   const pickedUpByLastName = prompt("Pickup person's last name?");
   if (!pickedUpByLastName) return;
-  await api(`/api/instance/packages/${id}`, { method: "PATCH", body: { isDelivered: true, pickedUpByLastName } });
+  const deliveryNotes = prompt("Delivery notes or ID verification?") || "";
+  const deliverySignature = prompt("Signature name (optional)") || "";
+  const deliveryPhoto = confirm("Attach a delivery photo?") ? await chooseImage() : "";
+  await api(`/api/instance/packages/${id}`, { method: "PATCH", body: { status: "delivered", isDelivered: true, pickedUpByLastName, deliveryNotes, deliverySignature, deliveryPhoto } });
   await refreshPackages();
   await refreshDashboard();
 };
+
+async function refreshContacts() {
+  const q = encodeURIComponent($("#contactSearch")?.value || "");
+  contacts = await api(`/api/instance/contacts?q=${q}`);
+  const options = `<option value="">No linked contact</option>` + contacts.map(c => `<option value="${c.id}">${[c.first_name, c.last_name].filter(Boolean).join(" ")}${c.mailbox ? ` - ${c.mailbox}` : ""}</option>`).join("");
+  $("#packageContact").innerHTML = options;
+  $("#contactTable").innerHTML = table(contacts, [
+    { label: "Name", render: c => `${c.first_name || ""} ${c.last_name}`.trim() },
+    { label: "Email", key: "email" },
+    { label: "Mailbox", key: "mailbox" },
+    { label: "Dept/Building", render: c => [c.department, c.building].filter(Boolean).join(" / ") },
+  ]);
+}
 
 async function refreshStorage() {
   const rows = await api("/api/instance/storage");
@@ -258,6 +326,58 @@ async function refreshUsers() {
   ]);
 }
 
+async function refreshNotifications() {
+  if (me.role === "employee") return;
+  const data = await api("/api/instance/notifications");
+  $("#notificationTemplates").innerHTML = data.templates.map(t => `<div class="template-card">
+    <div class="inline">
+      <label>Event <input value="${t.event}" disabled /></label>
+      <label>Enabled <select data-template-enabled="${t.id}"><option value="false">Disabled</option><option value="true" ${t.enabled ? "selected" : ""}>Enabled</option></select></label>
+      <label>Delay hours <input data-template-delay="${t.id}" type="number" step="0.25" value="${t.delay_hours}" /></label>
+    </div>
+    <label>Subject <input data-template-subject="${t.id}" value="${t.subject.replaceAll('"', "&quot;")}" /></label>
+    <label>Body <textarea data-template-body="${t.id}">${t.body}</textarea></label>
+    <button onclick="saveTemplate('${t.id}')">Save Template</button>
+  </div>`).join("");
+  $("#notificationLogs").innerHTML = table(data.logs, [
+    { label: "Event", key: "event" },
+    { label: "Recipient", key: "recipient" },
+    { label: "Status", key: "status" },
+    { label: "Created", render: r => new Date(r.created_at).toLocaleString() },
+  ]);
+}
+
+window.saveTemplate = async (id) => {
+  await api(`/api/instance/notifications/${id}`, {
+    method: "PATCH",
+    body: {
+      enabled: document.querySelector(`[data-template-enabled="${id}"]`).value === "true",
+      delayHours: document.querySelector(`[data-template-delay="${id}"]`).value,
+      subject: document.querySelector(`[data-template-subject="${id}"]`).value,
+      body: document.querySelector(`[data-template-body="${id}"]`).value,
+    },
+  });
+  await refreshNotifications();
+};
+
+async function refreshReports() {
+  const from = $("#reportFrom").value || "1970-01-01";
+  const to = $("#reportTo").value || "2999-12-31";
+  reportData = await api(`/api/instance/reports?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+  const counts = Object.fromEntries(reportData.summary.map(row => [row.status, row.count]));
+  $("#reportSummary").innerHTML = ["received", "routed", "stored", "attempted", "delivered"].map(status =>
+    `<div class="card stat"><div class="value">${counts[status] || 0}</div><div class="label">${status}</div></div>`
+  ).join("");
+  $("#reportTable").innerHTML = table(reportData.packages, [
+    { label: "Tracking", key: "tracking_number" },
+    { label: "Recipient", key: "recipient_name" },
+    { label: "Weight", key: "weight" },
+    { label: "Status", key: "status" },
+    { label: "Received", render: r => new Date(r.created_at).toLocaleDateString() },
+    { label: "Delivered", render: r => r.delivered_at ? new Date(r.delivered_at).toLocaleDateString() : "-" },
+  ]);
+}
+
 window.toggleUser = async (id, isActive) => {
   await api(`/api/instance/users/${id}`, { method: "PATCH", body: { isActive } });
   await refreshUsers();
@@ -276,11 +396,14 @@ async function boot() {
   if (!me) return;
   $$("[data-manager]").forEach(el => el.classList.toggle("hidden", me.role === "employee"));
   await refreshStorage();
+  await refreshContacts();
   await refreshPackages();
   await refreshDashboard();
   await refreshInvoices();
   await refreshTickets();
   await refreshUsers();
+  await refreshReports();
+  await refreshNotifications();
 }
 
 $("#loginForm").addEventListener("submit", async (e) => {
@@ -310,6 +433,73 @@ $("#storageForm").addEventListener("submit", async (e) => {
   await api("/api/instance/storage", { method: "POST", body: Object.fromEntries(new FormData(e.target)) });
   e.target.reset();
   await refreshStorage();
+});
+
+$("#contactForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  await api("/api/instance/contacts", { method: "POST", body: Object.fromEntries(new FormData(e.target)) });
+  e.target.reset();
+  await refreshContacts();
+});
+
+$("#refreshContactsBtn").addEventListener("click", refreshContacts);
+$("#contactSearch").addEventListener("input", refreshContacts);
+$("#packageContact").addEventListener("change", () => {
+  const c = contacts.find(row => row.id === $("#packageContact").value);
+  if (c) document.querySelector('#packageForm [name="recipientName"]').value = `${c.first_name || ""} ${c.last_name}`.trim();
+});
+
+$("#importContactsBtn").addEventListener("click", async () => {
+  const file = $("#contactCsv").files?.[0];
+  if (!file) return alert("Choose a CSV file first.");
+  const text = await file.text();
+  const [headerLine, ...lines] = text.trim().split(/\r?\n/);
+  const headers = headerLine.split(",").map(h => h.trim());
+  const contacts = lines.map(line => {
+    const values = line.split(",").map(v => v.trim());
+    return Object.fromEntries(headers.map((h, i) => [h, values[i] || ""]));
+  });
+  const result = await api("/api/instance/contacts/import", { method: "POST", body: { contacts } });
+  alert(`Imported ${result.imported} contacts.`);
+  await refreshContacts();
+});
+
+$("#scanTrackingBtn").addEventListener("click", async () => {
+  if (!("BarcodeDetector" in window)) {
+    alert("Barcode scanning is not supported in this browser yet. Use the tracking field manually.");
+    return;
+  }
+  const overlay = document.createElement("div");
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9999;display:grid;place-items:center;padding:20px";
+  overlay.innerHTML = `<div style="background:white;border-radius:10px;padding:16px;max-width:520px;width:100%">
+    <h2>Scan Tracking Barcode</h2>
+    <video autoplay playsinline style="width:100%;border-radius:8px;background:#111"></video>
+    <div class="toolbar" style="margin-top:12px"><button id="closeScanner">Cancel</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const video = overlay.querySelector("video");
+  const detector = new BarcodeDetector();
+  let stopped = false;
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+  video.srcObject = stream;
+  overlay.querySelector("#closeScanner").onclick = () => {
+    stopped = true;
+    stream.getTracks().forEach(track => track.stop());
+    overlay.remove();
+  };
+  const scan = async () => {
+    if (stopped) return;
+    try {
+      const codes = await detector.detect(video);
+      if (codes.length) {
+        document.querySelector('#packageForm [name="trackingNumber"]').value = codes[0].rawValue;
+        overlay.querySelector("#closeScanner").click();
+        return;
+      }
+    } catch {}
+    requestAnimationFrame(scan);
+  };
+  scan();
 });
 
 $("#packageForm").addEventListener("submit", async (e) => {
@@ -362,6 +552,30 @@ $("#printItemizedBtn").addEventListener("click", () => {
   w.document.write(html);
   w.document.close();
   w.print();
+});
+
+$("#runReportsBtn").addEventListener("click", refreshReports);
+$("#printManifestBtn").addEventListener("click", () => {
+  if (!reportData) return;
+  const rows = reportData.undelivered;
+  const html = `<!doctype html><html><head><title>Delivery Manifest</title><style>body{font-family:Arial;margin:36px}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #ccc;padding:8px;text-align:left}h1{margin-bottom:4px}.muted{color:#666}</style></head><body><h1>Delivery Manifest</h1><p class="muted">${meta.name} | ${new Date().toLocaleDateString()}</p><table><thead><tr><th>Tracking</th><th>Recipient</th><th>Status</th><th>Received</th><th>Signature</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r.tracking_number}</td><td>${r.recipient_name}</td><td>${r.status}</td><td>${new Date(r.created_at).toLocaleDateString()}</td><td></td></tr>`).join("")}</tbody></table></body></html>`;
+  const w = window.open("", "_blank");
+  w.document.write(html);
+  w.document.close();
+  w.print();
+});
+$("#exportPackagesBtn").addEventListener("click", () => {
+  if (!reportData) return;
+  const csv = [
+    ["tracking", "recipient", "weight", "status", "received", "routed", "stored", "attempted", "delivered", "picked_up_by"].map(csvEscape).join(","),
+    ...reportData.packages.map(r => [r.tracking_number, r.recipient_name, r.weight, r.status, r.created_at, r.routed_at, r.stored_at, r.attempted_at, r.delivered_at, r.picked_up_by_last_name].map(csvEscape).join(",")),
+  ].join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "tracklet-packages.csv";
+  a.click();
+  URL.revokeObjectURL(url);
 });
 $("#packageSearch").addEventListener("keydown", e => { if (e.key === "Enter") refreshPackages(false); });
 $("#archiveBtn").addEventListener("click", async () => {
@@ -443,5 +657,7 @@ $("#backupBtn").addEventListener("click", async () => {
 });
 
 $("#invoiceForm [name=dueDate]").value = today();
+$("#reportFrom").value = today();
+$("#reportTo").value = today();
 addInvoiceItem();
 boot();

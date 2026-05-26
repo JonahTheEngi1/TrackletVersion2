@@ -24,9 +24,12 @@
         <nav class="nav">
           <button data-view="dashboard" class="active">Dashboard</button>
           <button data-view="packages">Packages</button>
+          <button data-view="contacts">Contacts</button>
           <button data-view="storage">Storage</button>
           <button data-view="invoices">Invoices</button>
           <button data-view="tickets">Support</button>
+          <button data-view="reports">Reports</button>
+          <button data-view="notifications" data-manager>Notifications</button>
           <button data-view="users" data-manager>Users</button>
           <button data-view="backups" data-manager>Backups</button>
         </nav>
@@ -51,20 +54,22 @@
               <h2>Add Package</h2>
               <label>Tracking number <input name="trackingNumber" required /></label>
               <label>Recipient name <input name="recipientName" required /></label>
+              <label>Contact <select name="contactId" id="packageContact"></select></label>
               <label>Weight <input name="weight" type="number" step="0.01" min="0.01" required /></label>
               <label>Storage <select name="storageLocationId" id="packageStorage"></select></label>
               <label>Notes <textarea name="notes"></textarea></label>
+              <button type="button" id="scanTrackingBtn">Scan Barcode</button>
               <button class="primary">Save Package</button>
             </form>
             <div class="card">
               <div class="filters">
                 <label>Search <input id="packageSearch" placeholder="Recipient or tracking..." /></label>
                 <label>Storage <select id="packageStorageFilter"></select></label>
-                <label>Status <select id="packageStatusFilter"><option value="pending">Pending only</option><option value="all">All packages</option><option value="delivered">Delivered only</option></select></label>
+                <label>Status <select id="packageStatusFilter"><option value="pending">Open only</option><option value="all">All packages</option><option value="received">Received</option><option value="routed">Routed</option><option value="stored">Stored</option><option value="attempted">Attempted</option><option value="delivered">Delivered</option></select></label>
                 <button id="packageRefresh">Apply</button>
               </div>
               <div id="bulkPackageBar" class="selection-bar hidden">
-                <strong><span id="selectedPackageCount">0</span> selected · <span id="selectedPackageTotal">$0.00</span></strong>
+                <strong><span id="selectedPackageCount">0</span> selected | <span id="selectedPackageTotal">$0.00</span></strong>
                 <div class="row-actions">
                   <button id="bulkDeliverBtn" class="primary">Mark Delivered</button>
                   <button id="printItemizedBtn">Print Itemized</button>
@@ -78,6 +83,30 @@
             <h2>Search Cold Storage</h2>
             <div class="toolbar"><input id="archiveSearch" placeholder="Archived recipient or tracking..." /><button id="archiveBtn">Search</button></div>
             <div id="archiveTable"></div>
+          </div>
+        </section>
+
+        <section id="contacts" class="section">
+          <div class="topbar"><div class="page-title"><h1>Contacts</h1><p>Recipient records for faster package entry and notification routing.</p></div></div>
+          <div class="grid two">
+            <form id="contactForm" class="card form-grid">
+              <h2>Add Contact</h2>
+              <div class="inline"><label>First name <input name="firstName" /></label><label>Last name <input name="lastName" required /></label></div>
+              <label>Email <input name="email" type="email" /></label>
+              <div class="inline"><label>Contact ID <input name="contactCode" /></label><label>Mailbox <input name="mailbox" /></label></div>
+              <div class="inline"><label>Department <input name="department" /></label><label>Building <input name="building" /></label></div>
+              <label>Phone <input name="phone" /></label>
+              <label>Forward address <textarea name="forwardAddress"></textarea></label>
+              <button class="primary">Save Contact</button>
+            </form>
+            <div class="card form-grid">
+              <h2>Import CSV</h2>
+              <p class="muted">Headers: firstName,lastName,email,contactCode,mailbox,phone,department,building,forwardAddress</p>
+              <input id="contactCsv" type="file" accept=".csv,text/csv" />
+              <button id="importContactsBtn">Import Contacts</button>
+              <div class="toolbar"><input id="contactSearch" placeholder="Search contacts..." /><button id="refreshContactsBtn">Search</button></div>
+              <div id="contactTable"></div>
+            </div>
           </div>
         </section>
 
@@ -123,6 +152,30 @@
               <button class="primary">Submit Ticket</button>
             </form>
             <div class="card"><div id="ticketTable"></div></div>
+          </div>
+        </section>
+
+        <section id="reports" class="section">
+          <div class="topbar"><div class="page-title"><h1>Reports</h1><p>Operational summaries, manifests, stale mail, and exportable history.</p></div></div>
+          <div class="card">
+            <div class="toolbar">
+              <label>From <input id="reportFrom" type="date" /></label>
+              <label>To <input id="reportTo" type="date" /></label>
+              <button id="runReportsBtn" class="primary">Run Reports</button>
+              <button id="printManifestBtn">Print Delivery Manifest</button>
+              <button id="exportPackagesBtn">Export CSV</button>
+            </div>
+            <div id="reportSummary" class="grid stats"></div>
+            <h2>Package History</h2>
+            <div id="reportTable"></div>
+          </div>
+        </section>
+
+        <section id="notifications" class="section">
+          <div class="topbar"><div class="page-title"><h1>Notifications</h1><p>Configure lifecycle message templates and review queued notifications.</p></div></div>
+          <div class="grid two">
+            <div class="card"><h2>Templates</h2><div id="notificationTemplates"></div></div>
+            <div class="card"><h2>Recent Logs</h2><div id="notificationLogs"></div></div>
           </div>
         </section>
 
