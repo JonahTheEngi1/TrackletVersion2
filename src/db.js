@@ -241,6 +241,13 @@ export async function migrate() {
     ALTER TABLE packages ADD COLUMN IF NOT EXISTS id_verification text;
   `);
 
+  await query(`
+    CREATE INDEX IF NOT EXISTS packages_instance_created_idx ON packages (instance_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS packages_instance_status_created_idx ON packages (instance_id, status, created_at DESC);
+    CREATE INDEX IF NOT EXISTS packages_instance_storage_created_idx ON packages (instance_id, storage_location_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS packages_instance_tracking_idx ON packages (instance_id, tracking_number);
+  `);
+
   const adminCount = await one(`SELECT count(*)::int AS count FROM panel_users`);
   if (adminCount.count === 0) {
     const email = process.env.DEFAULT_ADMIN_EMAIL || "admin@tracklet.local";

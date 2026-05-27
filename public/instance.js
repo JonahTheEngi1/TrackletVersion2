@@ -11,6 +11,10 @@ let expandedPackages = new Set();
 let contacts = [];
 let reportData = null;
 let openActionMenu = null;
+let packagePage = 1;
+let packagePerPage = [25, 50, 100, 200].includes(Number(localStorage.getItem("trackletPackagePerPage"))) ? Number(localStorage.getItem("trackletPackagePerPage")) : 50;
+let packageTotal = 0;
+let packagePages = 1;
 
 async function api(url, options = {}) {
   const res = await fetch(proxyBase + url, {
@@ -63,20 +67,16 @@ async function refreshDashboard() {
   $("#totalPackages").textContent = d.totalPackages;
   $("#totalValue").textContent = `$${Number(d.totalValue).toFixed(2)}`;
   $("#openTickets").textContent = d.openTickets;
-  const pkgs = await api("/api/instance/packages");
+  const pkgData = await api("/api/instance/packages?status=all&page=1&perPage=8");
+  const pkgs = pkgData.rows || pkgData;
   $("#recentPackages").innerHTML = packageTable(pkgs.slice(0, 8));
 }
 
-function filteredPackages() {
+function packageQuery() {
   const q = ($("#packageSearch")?.value || "").toLowerCase().trim();
   const storage = $("#packageStorageFilter")?.value || "all";
   const status = $("#packageStatusFilter")?.value || "pending";
-  return allPackages.filter(pkg => {
-    const matchesText = !q || String(pkg.recipient_name).toLowerCase().includes(q) || String(pkg.tracking_number).toLowerCase().includes(q);
-    const matchesStorage = storage === "all" || (storage === "unassigned" ? !pkg.storage_location_id : pkg.storage_location_id === storage);
-    const matchesStatus = status === "all" || (status === "pending" ? pkg.status !== "delivered" : pkg.status === status);
-    return matchesText && matchesStorage && matchesStatus;
-  });
+  return new URLSearchParams({ q, storage, status, page: packagePage, perPage: packagePerPage });
 }
 
 function syncSelectionBar() {
@@ -175,7 +175,7 @@ function bindPackageSelection() {
   }));
   const selectAll = $("#selectAllPackages");
   if (selectAll) {
-    const pendingIds = filteredPackages().filter(p => !p.is_delivered).map(p => p.id);
+    const pendingIds = allPackages.filter(p => !p.is_delivered).map(p => p.id);
     selectAll.checked = pendingIds.length > 0 && pendingIds.every(id => selectedPackages.has(id));
     selectAll.addEventListener("change", () => {
       if (selectAll.checked) pendingIds.forEach(id => selectedPackages.add(id));
@@ -228,14 +228,49 @@ window.deleteStorage = async (id) => {
 
 async function refreshPackages(fetchFresh = true) {
   if (fetchFresh) {
-    allPackages = await api("/api/instance/packages");
+    const data = await api(`/api/instance/packages?${packageQuery()}`);
+    allPackages = data.rows || data;
+    packageTotal = data.total ?? allPackages.length;
+    packagePage = data.page ?? packagePage;
+    packagePerPage = data.perPage ?? packagePerPage;
+    packagePages = data.pages ?? 1;
   }
-  const visible = filteredPackages();
+  const visible = allPackages;
   const visibleIds = new Set(visible.map(p => p.id));
   selectedPackages = new Set(Array.from(selectedPackages).filter(id => visibleIds.has(id)));
   $("#packageTable").innerHTML = packageTable(visible, true);
+  renderPackagePagination();
   bindPackageSelection();
 }
+
+function renderPackagePagination() {
+  const start = packageTotal === 0 ? 0 : ((packagePage - 1) * packagePerPage) + 1;
+  const end = Math.min(packagePage * packagePerPage, packageTotal);
+  const pages = Array.from(new Set([1, packagePage - 1, packagePage, packagePage + 1, packagePages]))
+    .filter(page => page >= 1 && page <= packagePages)
+    .sort((a, b) => a - b);
+  $("#packagePagination").innerHTML = `
+    <div class="pagination-summary">${start}-${end} of ${packageTotal} packages</div>
+    <div class="pagination-controls">
+      <button ${packagePage <= 1 ? "disabled" : ""} onclick="setPackagePage(${packagePage - 1})">Prev</button>
+      ${pages.map((page, i) => `${i > 0 && page - pages[i - 1] > 1 ? `<span class="muted">...</span>` : ""}<button class="${page === packagePage ? "primary" : ""}" onclick="setPackagePage(${page})">${page}</button>`).join("")}
+      <button ${packagePage >= packagePages ? "disabled" : ""} onclick="setPackagePage(${packagePage + 1})">Next</button>
+      <label>Packages per page <select id="packagePerPageSelect">
+        ${[25, 50, 100, 200].map(size => `<option value="${size}" ${size === Number(packagePerPage) ? "selected" : ""}>${size}</option>`).join("")}
+      </select></label>
+    </div>`;
+  $("#packagePerPageSelect").addEventListener("change", async (e) => {
+    packagePerPage = Number(e.target.value);
+    localStorage.setItem("trackletPackagePerPage", String(packagePerPage));
+    packagePage = 1;
+    await refreshPackages();
+  });
+}
+
+window.setPackagePage = async (page) => {
+  packagePage = Math.min(packagePages, Math.max(1, page));
+  await refreshPackages();
+};
 
 function addInvoiceItem(name = "", quantity = 1, unitPrice = "") {
   const row = document.createElement("div");
@@ -540,10 +575,15 @@ $("#packageForm").addEventListener("submit", async (e) => {
   await refreshDashboard();
 });
 
-$("#packageRefresh").addEventListener("click", () => refreshPackages(false));
-$("#packageSearch").addEventListener("input", () => refreshPackages(false));
-$("#packageStorageFilter").addEventListener("change", () => refreshPackages(false));
-$("#packageStatusFilter").addEventListener("change", () => refreshPackages(false));
+function resetPackagePaging() {
+  packagePage = 1;
+  refreshPackages();
+}
+
+$("#packageRefresh").addEventListener("click", resetPackagePaging);
+$("#packageSearch").addEventListener("input", resetPackagePaging);
+$("#packageStorageFilter").addEventListener("change", resetPackagePaging);
+$("#packageStatusFilter").addEventListener("change", resetPackagePaging);
 $("#clearPackageSelection").addEventListener("click", () => {
   selectedPackages.clear();
   refreshPackages(false);
@@ -607,7 +647,7 @@ $("#exportPackagesBtn").addEventListener("click", () => {
   a.click();
   URL.revokeObjectURL(url);
 });
-$("#packageSearch").addEventListener("keydown", e => { if (e.key === "Enter") refreshPackages(false); });
+$("#packageSearch").addEventListener("keydown", e => { if (e.key === "Enter") resetPackagePaging(); });
 $("#archiveBtn").addEventListener("click", async () => {
   const rows = await api(`/api/instance/archive/search?q=${encodeURIComponent($("#archiveSearch").value)}`);
   $("#archiveTable").innerHTML = table(rows, [

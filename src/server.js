@@ -76,6 +76,26 @@ async function calculateCost(instanceId, weight) {
   return top ? Number(top.price) : 0;
 }
 
+async function addCalculatedCosts(instanceId, rows) {
+  const inst = await one(`SELECT * FROM instances WHERE id = $1`, [instanceId]);
+  if (!inst?.pricing_enabled) {
+    rows.forEach(row => { row.calculated_cost = 0; });
+    return rows;
+  }
+  if (inst.pricing_type === "per_pound") {
+    rows.forEach(row => { row.calculated_cost = Number(row.weight) * Number(inst.per_pound_rate || 0); });
+    return rows;
+  }
+  const tiers = await many(`SELECT * FROM pricing_tiers WHERE instance_id = $1 ORDER BY max_weight`, [instanceId]);
+  const top = tiers[tiers.length - 1];
+  rows.forEach(row => {
+    const weight = Number(row.weight);
+    const tier = tiers.find(item => weight >= Number(item.min_weight) && weight <= Number(item.max_weight));
+    row.calculated_cost = tier ? Number(tier.price) : top ? Number(top.price) : 0;
+  });
+  return rows;
+}
+
 async function logNotification(instanceId, event, pkg) {
   const template = await one(
     `SELECT * FROM notification_templates WHERE instance_id = $1 AND event = $2 AND enabled = true`,
@@ -596,7 +616,23 @@ function mountInstance() {
 
   app.get("/api/instance/packages", requireInstance, async (req, res) => {
     const instanceId = req.session.instanceUser.instanceId;
-    const search = `%${req.query.q || ""}%`;
+    const searchText = String(req.query.q || "").trim();
+    const search = `%${searchText}%`;
+    const storage = String(req.query.storage || "all");
+    const status = String(req.query.status || "all");
+    const requestedPage = Math.max(1, Number.parseInt(req.query.page || "1", 10) || 1);
+    const perPage = Math.min(200, Math.max(10, Number.parseInt(req.query.perPage || "50", 10) || 50));
+    const filters = [
+      "p.instance_id = $1",
+      "($2 = '%%' OR p.recipient_name ILIKE $2 OR p.tracking_number ILIKE $2)",
+      "($3 = 'all' OR ($3 = 'unassigned' AND p.storage_location_id IS NULL) OR p.storage_location_id::text = $3)",
+      "($4 = 'all' OR ($4 = 'pending' AND p.status <> 'delivered') OR p.status = $4)",
+    ].join(" AND ");
+    const params = [instanceId, search, storage, status];
+    const totalRow = await one(`SELECT count(*)::int AS total FROM packages p WHERE ${filters}`, params);
+    const pages = Math.max(1, Math.ceil(totalRow.total / perPage));
+    const page = Math.min(requestedPage, pages);
+    const offset = (page - 1) * perPage;
     const rows = await many(
       `SELECT p.*, s.name AS storage_name, u.name AS created_by_name, u.email AS created_by_email,
               c.email AS contact_email, c.mailbox AS contact_mailbox, c.department AS contact_department, c.building AS contact_building
@@ -604,12 +640,12 @@ function mountInstance() {
        LEFT JOIN storage_locations s ON s.id = p.storage_location_id
        LEFT JOIN instance_users u ON u.id = p.created_by
        LEFT JOIN contacts c ON c.id = p.contact_id
-       WHERE p.instance_id = $1 AND ($2 = '%%' OR p.recipient_name ILIKE $2 OR p.tracking_number ILIKE $2)
-       ORDER BY p.created_at DESC LIMIT 500`,
-      [instanceId, search],
+       WHERE ${filters}
+       ORDER BY p.created_at DESC LIMIT $5 OFFSET $6`,
+      [...params, perPage, offset],
     );
-    for (const row of rows) row.calculated_cost = await calculateCost(instanceId, row.weight);
-    res.json(rows);
+    await addCalculatedCosts(instanceId, rows);
+    res.json({ rows, total: totalRow.total, page, perPage, pages });
   });
 
   app.post("/api/instance/packages", requireInstance, async (req, res) => {

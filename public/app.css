@@ -284,6 +284,47 @@ tbody tr:hover { background: rgba(255,255,255,.58); }
   border: 1px solid rgba(242, 106, 46, .22);
   border-radius: 14px;
 }
+.pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.pagination-summary {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pagination-controls button {
+  min-width: 42px;
+}
+.pagination-controls button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.pagination-controls label {
+  display: flex;
+  grid-auto-flow: column;
+  align-items: center;
+  gap: 8px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+.pagination-controls select {
+  width: auto;
+  min-width: 84px;
+  padding: 8px 10px;
+}
 .detail-row td {
   background: rgba(255, 250, 244, .72);
   color: var(--ink);
