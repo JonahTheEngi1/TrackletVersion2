@@ -107,6 +107,11 @@ body::after {
   backdrop-filter: blur(14px);
   width: 100%;
 }
+.topbar > button {
+  flex: 0 0 auto;
+  min-height: 46px;
+  white-space: nowrap;
+}
 .page-title h1 { margin: 0 0 4px; font-size: 30px; letter-spacing: -.03em; }
 .page-title p { margin: 0; color: #384652; }
 .grid { display: grid; gap: 14px; }
@@ -119,6 +124,9 @@ body::after {
   padding: 16px;
   box-shadow: 0 18px 48px rgba(49, 59, 72, .12);
   backdrop-filter: blur(18px);
+}
+.package-workspace {
+  overflow: visible;
 }
 .card h2, .card h3 { margin: 0 0 12px; letter-spacing: -.02em; }
 .stat {
@@ -302,6 +310,46 @@ tbody tr:hover { background: rgba(255,255,255,.58); }
   background: rgba(255,255,255,.48);
   border: 1px solid rgba(255,255,255,.6);
   border-radius: 16px;
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(24, 32, 42, .46);
+  backdrop-filter: blur(10px);
+}
+.modal-card {
+  width: min(620px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 18px;
+  background: rgba(255,255,255,.92);
+  border: 1px solid rgba(255,255,255,.68);
+  border-radius: 18px;
+  box-shadow: 0 28px 80px rgba(21, 30, 42, .32);
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.modal-header h2 {
+  margin: 0 0 4px;
+  letter-spacing: -.02em;
+}
+.modal-header p {
+  margin: 0;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 .invoice-card {
   border: 1px solid var(--line);

@@ -439,6 +439,24 @@ $$(".nav button").forEach(btn => btn.addEventListener("click", async () => {
   $("#" + btn.dataset.view).classList.add("active");
 }));
 
+function openPackageModal() {
+  $("#packageModal").classList.remove("hidden");
+  document.querySelector('#packageForm [name="trackingNumber"]').focus();
+}
+
+function closePackageModal() {
+  $("#packageModal").classList.add("hidden");
+}
+
+$("#addPackageBtn").addEventListener("click", openPackageModal);
+$("#closePackageModal").addEventListener("click", closePackageModal);
+$("#packageModal").addEventListener("click", (e) => {
+  if (e.target.id === "packageModal") closePackageModal();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("#packageModal").classList.contains("hidden")) closePackageModal();
+});
+
 $("#storageForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   await api("/api/instance/storage", { method: "POST", body: Object.fromEntries(new FormData(e.target)) });
@@ -517,6 +535,7 @@ $("#packageForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   await api("/api/instance/packages", { method: "POST", body: Object.fromEntries(new FormData(e.target)) });
   e.target.reset();
+  closePackageModal();
   await refreshPackages();
   await refreshDashboard();
 });
