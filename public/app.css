@@ -185,8 +185,21 @@ button.danger.solid {
 button.danger.solid:hover { background: #912018; }
 button.ghost { background: transparent; }
 table { width: 100%; border-collapse: collapse; }
+table:has(.action-menu-list) { margin-bottom: 190px; }
 th, td { padding: 12px 11px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+td:first-child,
+th:first-child {
+  width: 38px;
+  vertical-align: middle;
+}
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  vertical-align: middle;
+  accent-color: var(--brand);
+}
 tbody tr { transition: background .15s ease, transform .15s ease; }
 tbody tr:hover { background: rgba(255,255,255,.58); }
 .badge { display: inline-flex; padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; background: #eef4ff; color: var(--brand-dark); }
@@ -215,6 +228,43 @@ tbody tr:hover { background: rgba(255,255,255,.58); }
 .section.active { display: block; }
 .list { display: grid; gap: 10px; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.actions-cell {
+  width: 120px;
+  position: relative;
+  overflow: visible;
+}
+.action-menu {
+  position: relative;
+  display: inline-block;
+}
+.action-menu > button {
+  min-width: 100px;
+  justify-content: space-between;
+}
+.action-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 150px;
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  background: rgba(255,255,255,.96);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 18px 42px rgba(31, 41, 51, .18);
+  backdrop-filter: blur(16px);
+}
+.action-menu-list button {
+  justify-content: flex-start;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.action-menu-list button:hover {
+  background: rgba(242, 106, 46, .1);
+}
 .selection-bar {
   display: flex;
   justify-content: space-between;

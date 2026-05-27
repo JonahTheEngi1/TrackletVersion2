@@ -10,6 +10,7 @@ let invoiceById = new Map();
 let expandedPackages = new Set();
 let contacts = [];
 let reportData = null;
+let openActionMenu = null;
 
 async function api(url, options = {}) {
   const res = await fetch(proxyBase + url, {
@@ -106,11 +107,16 @@ function packageTable(pkgs, selectable = false) {
       <td>${pkg.weight} lb</td>
       <td>$${Number(pkg.calculated_cost || 0).toFixed(2)}</td>
       <td>${status}</td>
-      <td><div class="row-actions">
-        ${pkg.is_delivered ? "" : `<button onclick="deliver('${pkg.id}')">Deliver</button>`}
-        ${pkg.is_delivered ? "" : `<button onclick="setPackageStatus('${pkg.id}','routed')">Route</button><button onclick="setPackageStatus('${pkg.id}','stored')">Store</button><button onclick="setPackageStatus('${pkg.id}','attempted')">Attempted</button>`}
-        <button onclick="printLabel('${pkg.id}')">Label</button>
-      </div></td>
+      <td class="actions-cell">
+        <div class="action-menu">
+          <button onclick="toggleActionMenu('${pkg.id}')">Actions ▾</button>
+          ${openActionMenu === pkg.id ? `<div class="action-menu-list">
+            ${pkg.is_delivered ? "" : `<button onclick="deliver('${pkg.id}')">Deliver</button>`}
+            ${pkg.is_delivered ? "" : `<button onclick="setPackageStatus('${pkg.id}','routed')">Route</button><button onclick="setPackageStatus('${pkg.id}','stored')">Store</button><button onclick="setPackageStatus('${pkg.id}','attempted')">Attempted</button>`}
+            <button onclick="printLabel('${pkg.id}')">Print Label</button>
+          </div>` : ""}
+        </div>
+      </td>
     </tr>
     ${expandedPackages.has(pkg.id) ? `<tr class="detail-row"><td colspan="${colSpan}">
       <div class="detail-grid">
@@ -133,6 +139,11 @@ function packageTable(pkgs, selectable = false) {
 window.togglePackageDetails = (id) => {
   if (expandedPackages.has(id)) expandedPackages.delete(id);
   else expandedPackages.add(id);
+  refreshPackages(false);
+};
+
+window.toggleActionMenu = (id) => {
+  openActionMenu = openActionMenu === id ? null : id;
   refreshPackages(false);
 };
 
